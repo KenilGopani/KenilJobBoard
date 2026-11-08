@@ -2,11 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
-  other: {
-    "codex-preview": "development",
-  },
+  title: "Rolecraft — Your next chapter",
+  description: "Your private Software Engineer and Applied AI Engineer career workspace.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
