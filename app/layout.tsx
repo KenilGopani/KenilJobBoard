@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Rolecraft — Your next chapter",
-  description: "Your private Software Engineer and Applied AI Engineer career workspace.",
+  description:
+    "Your private Software Engineer and Applied AI Engineer career workspace.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
