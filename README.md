@@ -52,7 +52,3 @@ Tests cover resume preservation, matching evidence, safe drafts, calendar export
 - `app/api/workspace/route.ts`: authenticated D1 persistence with revision checks.
 - `db/schema.ts` and `drizzle/`: schema and migrations.
 - `.openai/hosting.json`: existing private Site identity and storage binding.
-
-## Git identity
-
-Project commits use `Kenil Gopani <kenilgopani.dev@gmail.com>` without generated co-author attribution.
