@@ -8,6 +8,13 @@
       "when": 1794101135592,
       "tag": "0000_keen_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794800225337,
+      "tag": "0001_discovered_jobs",
+      "breakpoints": true
     }
   ]
 }
