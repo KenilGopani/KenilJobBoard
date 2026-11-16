@@ -150,7 +150,19 @@ export const evaluationPayloadSchema = z.discriminatedUnion("stage", [
       roleClassification: z.string().max(200).optional(),
       explanation: z.string().max(20000),
       nativeReport: z.string().max(1000).optional(),
+      recommendedResume: z
+        .enum(["core-swe", "applied-ai", "hybrid"])
+        .optional(),
     }),
+    /** Which resume family to use for this job (ApplyPilot's resume router). */
+    resumeRouting: z
+      .object({
+        recommended: z.enum(["core-swe", "applied-ai", "hybrid"]),
+        confidence: z.number().min(0).max(1),
+        reason: z.string().max(500),
+        alternative: z.enum(["core-swe", "applied-ai", "hybrid"]).nullable(),
+      })
+      .optional(),
   }),
 ]);
 export type EvaluationPayload = z.infer<typeof evaluationPayloadSchema>;

@@ -71,6 +71,12 @@ const authorizationBadge: Record<string, { label: string; tone: string }> = {
   unknown: { label: "Sponsorship unknown", tone: "muted" },
 };
 
+const resumeLabel: Record<string, string> = {
+  "core-swe": "Core software engineer",
+  "applied-ai": "Applied AI",
+  hybrid: "Full-stack AI / hybrid",
+};
+
 const decisionLabel: Record<string, string> = {
   apply: "Apply",
   review: "Consider",
@@ -544,6 +550,18 @@ export default function DiscoveredInbox({
                               ] ?? detail.evaluation.evaluation.decision}
                             </h4>
                             <p>{detail.evaluation.evaluation.explanation}</p>
+                            {detail.evaluation.resumeRouting && (
+                              <p className="discovery-resume">
+                                Resume to use:{" "}
+                                <strong>
+                                  {resumeLabel[
+                                    detail.evaluation.resumeRouting.recommended
+                                  ] ??
+                                    detail.evaluation.resumeRouting.recommended}
+                                </strong>{" "}
+                                — {detail.evaluation.resumeRouting.reason}
+                              </p>
+                            )}
                             {detail.evaluation.evaluation.matched.length >
                               0 && (
                               <>
