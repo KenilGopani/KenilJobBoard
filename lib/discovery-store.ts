@@ -25,6 +25,7 @@ import {
   type IngestRun,
   type Provenance,
   type EvaluationPayload,
+  type Preparation,
   type Screening,
 } from "./discovery.ts";
 
@@ -82,6 +83,7 @@ function summary(
       null) as DiscoveredJobSummary["evaluationStage"],
     evaluationScore: row.evaluationScore ?? null,
     evaluationDecision: row.evaluationDecision ?? null,
+    preparedAt: row.preparedAt ?? null,
   };
 }
 
@@ -128,6 +130,7 @@ function detail(row: Row): DiscoveredJobDetail {
     rawSource,
     screening: parseScreening(row.screening),
     evaluation: parseJson<EvaluationPayload>(row.evaluation),
+    preparation: parseJson<Preparation>(row.preparation),
   };
 }
 
@@ -438,6 +441,8 @@ export async function importDiscovery(
         evaluationDecision: null,
         evaluation: null,
         evaluatedAt: null,
+        preparation: null,
+        preparedAt: null,
       }),
       ...stored,
     });
@@ -655,4 +660,18 @@ export async function setEvaluation(
     .set(values)
     .where(and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.id, id)));
   return "stored";
+}
+
+export async function setPreparation(
+  db: Db,
+  userId: string,
+  id: string,
+  bundle: Preparation,
+): Promise<boolean> {
+  const rows = await db
+    .update(discoveredJobs)
+    .set({ preparation: JSON.stringify(bundle), preparedAt: bundle.preparedAt })
+    .where(and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.id, id)))
+    .returning({ id: discoveredJobs.id });
+  return rows.length > 0;
 }

@@ -62,6 +62,9 @@ export const discoveredJobs = sqliteTable(
     /** JSON of the triage line or the full CanonicalJobEvaluation. */
     evaluation: text("evaluation"),
     evaluatedAt: text("evaluated_at"),
+    /** JSON of ApplyPilot's application preparation bundle (never submitted anywhere). */
+    preparation: text("preparation"),
+    preparedAt: text("prepared_at"),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),

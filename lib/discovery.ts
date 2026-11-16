@@ -167,6 +167,39 @@ export const evaluationPayloadSchema = z.discriminatedUnion("stage", [
 ]);
 export type EvaluationPayload = z.infer<typeof evaluationPayloadSchema>;
 
+/** ApplyPilot's application preparation bundle. Rolecraft only displays it. */
+export const preparationSchema = z.object({
+  preparedAt: isoDateTime,
+  resume: z.object({
+    family: z.enum(["core-swe", "applied-ai", "hybrid"]),
+    reason: z.string().max(500),
+    versionId: z.string().max(50),
+    file: z.string().max(1000),
+    changedLines: z.number().int().min(0),
+    matchedTerms: z.array(z.string().max(100)).max(50),
+  }),
+  priorities: z
+    .array(
+      z.object({
+        action: z.string().max(50),
+        detail: z.string().max(1000),
+        evidence: z.string().max(1000),
+      }),
+    )
+    .max(40),
+  gaps: z.array(z.string().max(1000)).max(60),
+  drafts: z
+    .object({
+      coverLetter: z.string().max(5000),
+      outreach: z.string().max(500),
+      whyCompany: z.string().max(2000),
+      unverifiedNumbers: z.array(z.string().max(30)).max(50),
+    })
+    .nullable(),
+  checklist: z.array(z.string().max(500)).max(20),
+});
+export type Preparation = z.infer<typeof preparationSchema>;
+
 export const ingestJobSchema = z.object({
   id: z.string().regex(/^job_[0-9a-f]{16}$/),
   externalId: z.string().min(1).max(200).optional(),
@@ -252,11 +285,13 @@ export type DiscoveredJobSummary = {
   evaluationStage: EvaluationPayload["stage"] | null;
   evaluationScore: number | null;
   evaluationDecision: string | null;
+  preparedAt: string | null;
 };
 
 export type DiscoveredJobDetail = DiscoveredJobSummary & {
   screening: Screening | null;
   evaluation: EvaluationPayload | null;
+  preparation: Preparation | null;
   description: string | null;
   provenance: Provenance[];
   rawSource: unknown;
