@@ -31,6 +31,12 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 - The same posting found on several sources (for example LinkedIn and the employer's Greenhouse board) becomes one job. ApplyPilot sends identity keys with each job, and an import that shares a key merges into the job already stored, filling only what it lacks. Jobs with different ATS or requisition ids are never merged, and a job you already acted on is never folded away.
 - Save or Applied turns a discovered job into an opportunity, linked back through `discoveredJobId`. Sponsorship, authorization and level stay unknown until you verify them.
 
+### Screening, evaluation and application prep (from ApplyPilot)
+
+- Hard-filter results per job: jobs that fail (location, level, required years, sponsorship, salary) move to **Filtered out** with the reason and quoted evidence; every row shows its sponsorship signal.
+- Career Ops evaluations: score, decision, the matched requirements with the CV's own words, gaps, and the resume to use. **Best match** sorts by evaluation.
+- Application prep per job: tailored resume version (reordered, never rewritten), priorities, gaps, copyable drafts with unverified numbers flagged, and a before-you-apply checklist. Nothing is ever submitted.
+
 ### Opportunity tracking
 
 - Saves roles from LinkedIn, Indeed, ZipRecruiter, Jobright, Jack & Jill AI, a16z, Wellfound, YC, and other sources.
@@ -38,6 +44,11 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 - Filters by role track, location, work mode, sponsorship, work authorization, new-grad or early-career fit, platform, and application status.
 - Stores job links, descriptions, recruiter details, notes, application dates, deadlines, and follow-up dates.
 - Tracks stages across Saved, Applied, Screening, Interview, Offer, Rejected, and Withdrawn.
+- Each stage change lands in the opportunity's timeline and schedules the next follow-up (Applied 7 days, Screening 5, Interview 3, Offer 2) unless a later one is set; Rejected and Withdrawn stop reminders. Interview rounds can be logged.
+
+### Analytics
+
+- Response, recruiter-screen, interview and offer rates by role family, resume, source, employer site vs job board and evaluation score, plus median days to response, with plain-language insights once there is enough data.
 
 ### Resume studio
 
@@ -148,7 +159,7 @@ node --import ./scripts/sites-env.mjs \
   --file drizzle/0000_keen_senator_kelly.sql
 ```
 
-Then apply `drizzle/0001_discovered_jobs.sql` and `drizzle/0002_discovered_job_keys.sql` the same way. Apply each migration only once to a given local database. Local and production D1 data are separate.
+Then apply `drizzle/0001_discovered_jobs.sql` through `drizzle/0005_discovered_job_preparation.sql` the same way, in order. Apply each migration only once to a given local database. Local and production D1 data are separate.
 
 ### Start the app
 
