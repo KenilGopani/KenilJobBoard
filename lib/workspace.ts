@@ -86,6 +86,8 @@ export const jobSchema = z.object({
   recruiter: z.string().max(200),
   createdAt: z.string().max(50),
   reminderDone: z.boolean(),
+  /** Set when the opportunity was saved from the Discovered inbox. */
+  discoveredJobId: z.string().min(1).max(100).optional(),
 });
 export const workspaceSchema = z.object({
   jobs: z
