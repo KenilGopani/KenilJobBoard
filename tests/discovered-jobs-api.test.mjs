@@ -479,3 +479,68 @@ test("evaluations are stored on a job, shown in the list, and a quick check neve
     await api(`/runs/${runId}`, { method: "DELETE" });
   }
 });
+
+test("an application prep bundle is stored and shown; nothing else changes", async () => {
+  const runId = `run_qa_prep_${randomBytes(4).toString("hex")}`;
+  const j = job(1, runId);
+  const bundle = {
+    preparedAt: at,
+    resume: {
+      family: "applied-ai",
+      reason: "AI focus",
+      versionId: "rv_0123456789ab",
+      file: "/tmp/rv.md",
+      changedLines: 3,
+      matchedTerms: ["Python"],
+    },
+    priorities: [
+      {
+        action: "reorder-skills",
+        detail: "List Python first",
+        evidence: "Python",
+      },
+    ],
+    gaps: ["PyTorch"],
+    drafts: {
+      coverLetter: "Dear [Hiring Manager], …",
+      outreach: "Hi!",
+      whyCompany: "RAG",
+      unverifiedNumbers: [],
+    },
+    checklist: ["Submit the application yourself on the employer's site"],
+  };
+  try {
+    await api("", {
+      method: "POST",
+      body: JSON.stringify({ run: run(runId), jobs: [j] }),
+    });
+    const put = (b) =>
+      api(`/${j.id}/preparation`, { method: "PUT", body: JSON.stringify(b) });
+    assert.equal((await put(bundle)).status, 200);
+    const stored = (await (await api(`/${j.id}`)).json()).job;
+    assert.equal(stored.preparation.resume.versionId, "rv_0123456789ab");
+    assert.equal(stored.preparedAt, at);
+    assert.equal(
+      stored.status,
+      "new",
+      "preparing never changes the inbox status",
+    );
+    assert.equal(
+      (await put({ ...bundle, resume: { ...bundle.resume, family: "other" } }))
+        .status,
+      400,
+    );
+    assert.equal(
+      (
+        await api(`/job_0000000000000000/preparation`, {
+          method: "PUT",
+          body: JSON.stringify(bundle),
+        })
+      ).status,
+      404,
+    );
+  } finally {
+    await api(`/${j.id}`, { method: "DELETE" });
+    await api(`/runs/${runId}`, { method: "DELETE" });
+  }
+});
