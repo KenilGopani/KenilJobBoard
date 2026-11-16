@@ -2278,3 +2278,335 @@ tr:hover td {
     font-size: 10px;
   }
 }
+
+/* Discovered jobs inbox */
+.discovery-tabs {
+  padding: 0 20px;
+}
+.discovery-tabs small {
+  margin-left: 4px;
+  color: #b4bbb0;
+}
+.discovery-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.discovery-list > li {
+  border-top: 1px solid var(--line);
+}
+.discovery-list > li.expanded {
+  background: #fbfbfa;
+}
+.discovery-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 20px;
+}
+.discovery-row .role-cell {
+  min-width: 0;
+  color: #a0a6aa;
+}
+.discovery-row .role-cell strong {
+  max-width: 420px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.discovery-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 9px;
+  color: #939ca2;
+  white-space: nowrap;
+}
+.discovery-actions {
+  display: flex;
+  gap: 6px;
+}
+.discovery-actions .button {
+  padding: 7px 9px;
+  font-size: 10px;
+}
+.discovery-detail {
+  padding: 0 20px 18px 47px;
+}
+.discovery-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 10px;
+  color: #939ca2;
+  margin-bottom: 12px;
+}
+.discovery-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--orange);
+}
+.discovery-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #5d6663;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 14px 16px;
+}
+@media (max-width: 1080px) {
+  .discovery-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .discovery-actions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 760px) {
+  .discovery-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+  .discovery-meta {
+    align-items: flex-start;
+  }
+  .discovery-detail {
+    padding: 0 16px 16px;
+  }
+}
+
+/* Discovered jobs: screening badges and checks */
+.role-cell .discovery-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.discovery-badges em,
+.discovery-checks em {
+  font-style: normal;
+  font-size: 8px;
+  border-radius: 5px;
+  padding: 3px 6px;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.tone-ok {
+  background: #ecf4ec;
+  color: #5f8a5c;
+}
+.tone-bad {
+  background: #fbebeb;
+  color: #b56f6f;
+}
+.tone-warn {
+  background: #fcf1df;
+  color: #a5813f;
+}
+.tone-muted {
+  background: #f1f2f3;
+  color: #8b9197;
+}
+.discovery-checks {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 10px;
+  color: #5d6663;
+}
+.discovery-checks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.discovery-checks q {
+  color: #8b9197;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+/* Discovered jobs: evaluation */
+.discovery-sort {
+  border: 1px solid #e2e5e6;
+  border-radius: 7px;
+  background: white;
+  font-size: 11px;
+  padding: 8px 10px;
+  color: #5d6663;
+}
+.discovery-evaluation {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: #5d6663;
+}
+.discovery-evaluation h4 {
+  font-size: 12px;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+.discovery-evaluation h5 {
+  font-size: 10px;
+  margin: 12px 0 4px;
+  color: #8b9197;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.discovery-evaluation ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.discovery-evaluation li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+.discovery-evaluation q {
+  color: #8b9197;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.discovery-evaluation em {
+  font-style: normal;
+  font-size: 8px;
+  border-radius: 5px;
+  padding: 3px 6px;
+}
+
+/* Discovered jobs: application prep and run history */
+.discovery-prep code {
+  font-size: 10px;
+  background: #f4f5f6;
+  border-radius: 4px;
+  padding: 1px 4px;
+  overflow-wrap: anywhere;
+}
+.discovery-draft {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.discovery-draft > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.discovery-draft .button {
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.discovery-draft p {
+  white-space: pre-wrap;
+}
+.discovery-runs {
+  padding: 0 20px 10px;
+  font-size: 10px;
+  color: #8b9197;
+}
+.discovery-runs summary {
+  cursor: pointer;
+}
+.discovery-runs ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.discovery-runs li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+}
+.discovery-runs em {
+  font-style: normal;
+  font-size: 8px;
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+/* Opportunity timeline */
+.job-timeline {
+  margin: 16px 0;
+  font-size: 11px;
+  color: #5d6663;
+}
+.job-timeline h4 {
+  font-size: 12px;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.job-timeline ul {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.job-timeline li span {
+  color: #a0a6aa;
+  margin-right: 8px;
+}
+.job-timeline form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.job-timeline input {
+  border: 1px solid #e2e5e6;
+  border-radius: 7px;
+  padding: 7px 9px;
+  font-size: 11px;
+  flex: 1 1 140px;
+}
+
+/* Analytics */
+.analytics {
+  display: grid;
+  gap: 16px;
+}
+.analytics-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 18px 20px;
+}
+.analytics-summary span {
+  display: block;
+  font-size: 10px;
+  color: #8b9197;
+}
+.analytics-summary strong {
+  font-size: 22px;
+  font-family: Georgia, serif;
+  font-weight: 400;
+  color: var(--ink);
+}
+.analytics-insights ul {
+  margin: 0;
+  padding: 16px 20px 16px 36px;
+  font-size: 11px;
+  color: #5d6663;
+}
+.analytics-table td {
+  font-size: 10px;
+}

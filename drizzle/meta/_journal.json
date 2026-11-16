@@ -8,6 +8,41 @@
       "when": 1794101135592,
       "tag": "0000_keen_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794800225337,
+      "tag": "0001_discovered_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794802533768,
+      "tag": "0002_discovered_job_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794803497514,
+      "tag": "0003_discovered_job_screening",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794804019336,
+      "tag": "0004_discovered_job_evaluation",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794836024363,
+      "tag": "0005_discovered_job_preparation",
+      "breakpoints": true
     }
   ]
 }

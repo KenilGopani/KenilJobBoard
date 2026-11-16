@@ -23,6 +23,20 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 
 ## What Rolecraft does
 
+### Discovered jobs inbox
+
+- Receives jobs found by automated search ([ApplyPilot](https://github.com/KenilGopani/ApplyPilot) runs JobSpy and pushes canonical jobs to `/api/discovered-jobs`).
+- Keeps them in their own table, separate from application stages, with statuses New, Review, Saved, Applied and Skipped.
+- Re-imports are idempotent: a decision you made is never reset, and each new sighting of a posting is added to its source history.
+- The same posting found on several sources (for example LinkedIn and the employer's Greenhouse board) becomes one job. ApplyPilot sends identity keys with each job, and an import that shares a key merges into the job already stored, filling only what it lacks. Jobs with different ATS or requisition ids are never merged, and a job you already acted on is never folded away.
+- Save or Applied turns a discovered job into an opportunity, linked back through `discoveredJobId`. Sponsorship, authorization and level stay unknown until you verify them.
+
+### Screening, evaluation and application prep (from ApplyPilot)
+
+- Hard-filter results per job: jobs that fail (location, level, required years, sponsorship, salary) move to **Filtered out** with the reason and quoted evidence; every row shows its sponsorship signal.
+- Career Ops evaluations: score, decision, the matched requirements with the CV's own words, gaps, and the resume to use. **Best match** sorts by evaluation.
+- Application prep per job: tailored resume version (reordered, never rewritten), priorities, gaps, copyable drafts with unverified numbers flagged, and a before-you-apply checklist. Nothing is ever submitted.
+
 ### Opportunity tracking
 
 - Saves roles from LinkedIn, Indeed, ZipRecruiter, Jobright, Jack & Jill AI, a16z, Wellfound, YC, and other sources.
@@ -30,6 +44,11 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 - Filters by role track, location, work mode, sponsorship, work authorization, new-grad or early-career fit, platform, and application status.
 - Stores job links, descriptions, recruiter details, notes, application dates, deadlines, and follow-up dates.
 - Tracks stages across Saved, Applied, Screening, Interview, Offer, Rejected, and Withdrawn.
+- Each stage change lands in the opportunity's timeline and schedules the next follow-up (Applied 7 days, Screening 5, Interview 3, Offer 2) unless a later one is set; Rejected and Withdrawn stop reminders. Interview rounds can be logged.
+
+### Analytics
+
+- Response, recruiter-screen, interview and offer rates by role family, resume, source, employer site vs job board and evaluation score, plus median days to response, with plain-language insights once there is enough data.
 
 ### Resume studio
 
@@ -69,7 +88,7 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 
 Rolecraft is intentionally transparent about what it does today:
 
-- Job sources are shortcuts to external platforms. Listings and descriptions are entered manually; the app does not scrape job boards.
+- Job sources are shortcuts to external platforms. Rolecraft itself does not scrape job boards; discovered jobs arrive from ApplyPilot running on your machine, and everything else is entered manually.
 - Resume comparison is deterministic keyword evidence, not a semantic LLM review or an ATS score.
 - Outreach uses editable templates and is never sent on the user's behalf.
 - Sponsorship and work-authorization fields record verified listing details; they are not legal or immigration advice.
@@ -140,7 +159,7 @@ node --import ./scripts/sites-env.mjs \
   --file drizzle/0000_keen_senator_kelly.sql
 ```
 
-Apply each migration only once to a given local database. Local and production D1 data are separate.
+Then apply `drizzle/0001_discovered_jobs.sql` through `drizzle/0005_discovered_job_preparation.sql` the same way, in order. Apply each migration only once to a given local database. Local and production D1 data are separate.
 
 ### Start the app
 
@@ -171,6 +190,8 @@ The test suite covers:
 - unsafe URL and impossible-date rejection
 - authentication and origin enforcement
 - D1 persistence and stale-write conflicts
+- discovered-job imports: validation, idempotent re-import, preserved decisions, provenance merging, promotion and cleanup
+- cross-source merging: shared keys merge, conflicting ATS ids stay apart, acted-on jobs survive, legacy copies fold
 
 API tests use only the local mock identity and restore the starting workspace after the test completes.
 
