@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/workspace.test.mjs tests/discovery.test.mjs",
-    "test:api": "node --experimental-strip-types --test tests/api.test.mjs",
+    "test:api": "node --experimental-strip-types --test tests/api.test.mjs tests/discovered-jobs-api.test.mjs",
     "format": "prettier --write app components/dashboard.tsx lib/workspace.ts db/schema.ts tests README.md"
   },
   "dependencies": {
