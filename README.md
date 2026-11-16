@@ -23,6 +23,13 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 
 ## What Rolecraft does
 
+### Discovered jobs inbox
+
+- Receives jobs found by automated search ([ApplyPilot](https://github.com/KenilGopani/ApplyPilot) runs JobSpy and pushes canonical jobs to `/api/discovered-jobs`).
+- Keeps them in their own table, separate from application stages, with statuses New, Review, Saved, Applied and Skipped.
+- Re-imports are idempotent: a decision you made is never reset, and each new sighting of a posting is added to its source history.
+- Save or Applied turns a discovered job into an opportunity, linked back through `discoveredJobId`. Sponsorship, authorization and level stay unknown until you verify them.
+
 ### Opportunity tracking
 
 - Saves roles from LinkedIn, Indeed, ZipRecruiter, Jobright, Jack & Jill AI, a16z, Wellfound, YC, and other sources.
@@ -69,7 +76,7 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 
 Rolecraft is intentionally transparent about what it does today:
 
-- Job sources are shortcuts to external platforms. Listings and descriptions are entered manually; the app does not scrape job boards.
+- Job sources are shortcuts to external platforms. Rolecraft itself does not scrape job boards; discovered jobs arrive from ApplyPilot running on your machine, and everything else is entered manually.
 - Resume comparison is deterministic keyword evidence, not a semantic LLM review or an ATS score.
 - Outreach uses editable templates and is never sent on the user's behalf.
 - Sponsorship and work-authorization fields record verified listing details; they are not legal or immigration advice.
@@ -140,7 +147,7 @@ node --import ./scripts/sites-env.mjs \
   --file drizzle/0000_keen_senator_kelly.sql
 ```
 
-Apply each migration only once to a given local database. Local and production D1 data are separate.
+Then apply `drizzle/0001_discovered_jobs.sql` the same way. Apply each migration only once to a given local database. Local and production D1 data are separate.
 
 ### Start the app
 
@@ -171,6 +178,7 @@ The test suite covers:
 - unsafe URL and impossible-date rejection
 - authentication and origin enforcement
 - D1 persistence and stale-write conflicts
+- discovered-job imports: validation, idempotent re-import, preserved decisions, provenance merging, promotion and cleanup
 
 API tests use only the local mock identity and restore the starting workspace after the test completes.
 
