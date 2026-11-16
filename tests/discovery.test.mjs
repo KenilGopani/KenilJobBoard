@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  fillMissing,
+  KEY_PRIORITY,
+  keyRank,
+  keysConflict,
   ingestPayloadSchema,
   ingestJobSchema,
   mergeProvenance,
@@ -161,5 +165,69 @@ test("salary labels and status updates", () => {
   assert.equal(
     statusUpdateSchema.safeParse({ status: "Applied" }).success,
     false,
+  );
+});
+
+test("dedup keys: strongest kind ranks first and conflicting opening ids block a merge", () => {
+  assert.ok(keyRank("ats:greenhouse:1") < keyRank("cctl:a|b|c"));
+  assert.ok(keyRank("id:job_1") < keyRank("url:https://x"));
+  assert.equal(keyRank("ct:a|b"), KEY_PRIORITY.length, "weak kinds rank last");
+  assert.ok(keysConflict(["ats:greenhouse:1"], ["ats:greenhouse:2"]));
+  assert.ok(keysConflict(["req:acme:r-1"], ["req:acme:r-2"]));
+  assert.ok(
+    !keysConflict(["req:acme:r-1"], ["req:globex:r-2"]),
+    "requisitions are per company",
+  );
+  assert.ok(!keysConflict(["ats:greenhouse:1"], ["ats:lever:9"]));
+  assert.ok(!keysConflict(["cctl:a|b|c"], ["ats:greenhouse:2"]));
+  assert.equal(
+    ingestJobSchema.safeParse({ ...canonical, dedupKeys: ["ats:greenhouse:1"] })
+      .success,
+    true,
+  );
+  assert.equal(
+    ingestJobSchema.safeParse({ ...canonical, dedupKeys: ["no-kind"] }).success,
+    false,
+  );
+});
+
+test("merging fills only missing fields and moves salary as one unit", () => {
+  const existing = {
+    location: "San Francisco, CA",
+    postedAt: null,
+    employmentType: null,
+    description: null,
+    remoteType: "unknown",
+    salaryMin: null,
+    salaryMax: null,
+    salaryCurrency: null,
+    salaryInterval: null,
+  };
+  assert.deepEqual(
+    fillMissing(existing, {
+      location: "Elsewhere",
+      postedAt: "2026-11-01",
+      description: "JD text",
+      remoteType: "hybrid",
+      salaryMin: 140000,
+      salaryCurrency: "USD",
+      salaryInterval: "yearly",
+    }),
+    {
+      postedAt: "2026-11-01",
+      description: "JD text",
+      remoteType: "hybrid",
+      salaryMin: 140000,
+      salaryMax: null,
+      salaryCurrency: "USD",
+      salaryInterval: "yearly",
+    },
+  );
+  assert.deepEqual(
+    fillMissing(
+      { ...existing, salaryMax: 150000, remoteType: "remote" },
+      { salaryMin: 1, remoteType: "onsite" },
+    ),
+    {},
   );
 });

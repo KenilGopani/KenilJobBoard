@@ -92,11 +92,12 @@ test("discovered jobs API imports idempotently, keeps provenance and decisions, 
       received: 2,
       created: 2,
       updated: 0,
+      merged: 0,
     });
 
     // Re-importing the same run changes nothing visible.
     const again = await (await post({ run: run(runA), jobs })).json();
-    assert.deepEqual(again, { received: 2, created: 0, updated: 2 });
+    assert.deepEqual(again, { received: 2, created: 0, updated: 2, merged: 0 });
 
     // A human decision survives later imports.
     const patch = await api(`/${jobs[0].id}`, {
@@ -182,4 +183,134 @@ test("discovered jobs API imports idempotently, keeps provenance and decisions, 
   const runs = (await (await api("?limit=0")).json()).runs;
   assert.ok(!runs.some((r) => r.runId.startsWith(runA)), "test runs removed");
   assert.equal((await api(`/runs/${runA}`, { method: "DELETE" })).status, 404);
+});
+
+test("imports merge the same posting across sources, respect conflicting ids, and never fold a decided job", async () => {
+  const runId = `run_qa_dedup_${randomBytes(4).toString("hex")}`;
+  const tag = randomBytes(3).toString("hex");
+  const post = (jobs) =>
+    api("", {
+      method: "POST",
+      body: JSON.stringify({ run: run(runId), jobs }),
+    }).then((r) => r.json());
+  const withKeys = (j, keys, extra = {}) => ({
+    ...j,
+    dedupKeys: keys,
+    ...extra,
+  });
+  const created = [];
+  const track = (...js) => created.push(...js.map((j) => j.id));
+  const get = async (id) => (await api(`/${id}`)).json();
+
+  const ats = `ats:greenhouse:${tag}111`;
+  const cctl = `cctl:fictional test co|qa ${tag}|austin`;
+  try {
+    // 1. The employer's posting, stored first without a description.
+    const atsJob = withKeys(job(1, runId), [cctl, ats], {
+      description: undefined,
+      source: "greenhouse",
+    });
+    track(atsJob);
+    assert.deepEqual(await post([atsJob]), {
+      received: 1,
+      created: 1,
+      updated: 0,
+      merged: 0,
+    });
+
+    // 2. A board copy whose apply link is that posting merges into it and fills the description.
+    const board = withKeys(job(2, runId), [ats], {
+      description: "Board description",
+    });
+    track(board);
+    assert.deepEqual(await post([board]), {
+      received: 1,
+      created: 0,
+      updated: 0,
+      merged: 1,
+    });
+    assert.equal((await api(`/${board.id}`)).status, 404, "no second row");
+    const stored = (await get(atsJob.id)).job;
+    assert.equal(stored.description, "Board description");
+    assert.equal(stored.provenance.length, 2);
+    assert.equal(
+      stored.source,
+      "greenhouse",
+      "the stored job keeps its identity",
+    );
+
+    // 3. Same company/title/city but a different ATS id is a different opening.
+    const other = withKeys(job(3, runId), [cctl, `ats:greenhouse:${tag}222`]);
+    track(other);
+    assert.deepEqual(await post([other]), {
+      received: 1,
+      created: 1,
+      updated: 0,
+      merged: 0,
+    });
+
+    // 4. An earlier, untouched copy stored without keys is folded into the match.
+    const legacy = job(4, runId);
+    const match = withKeys(job(5, runId), [`cctl:fold ${tag}`]);
+    track(legacy, match);
+    await post([legacy]);
+    await post([match]);
+    assert.deepEqual(await post([withKeys(legacy, [`cctl:fold ${tag}`])]), {
+      received: 1,
+      created: 0,
+      updated: 0,
+      merged: 1,
+    });
+    assert.equal((await api(`/${legacy.id}`)).status, 404);
+    const folded = (await get(match.id)).job;
+    assert.ok(folded.provenance.some((p) => p.url === legacy.sourceUrl));
+
+    // 5. A copy the user already acted on survives: the untouched twin folds into it.
+    const decided = job(6, runId);
+    const twin = withKeys(job(7, runId), [`cctl:keep ${tag}`]);
+    track(decided, twin);
+    await post([decided]);
+    await api(`/${decided.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "skip" }),
+    });
+    await post([twin]);
+    assert.deepEqual(await post([withKeys(decided, [`cctl:keep ${tag}`])]), {
+      received: 1,
+      created: 0,
+      updated: 0,
+      merged: 1,
+    });
+    const kept = (await get(decided.id)).job;
+    assert.equal(kept.status, "skip");
+    assert.ok(kept.provenance.some((p) => p.url === twin.sourceUrl));
+    assert.equal((await api(`/${twin.id}`)).status, 404);
+
+    // 6. Two copies stored before keys existed are joined by id keys alone.
+    const oldA = job(8, runId);
+    const oldB = job(9, runId);
+    track(oldA, oldB);
+    await post([oldA, oldB]);
+    assert.equal((await post([withKeys(oldA, [`id:${oldB.id}`])])).merged, 1);
+    const statuses = await Promise.all(
+      [oldA, oldB].map(async (j) => (await api(`/${j.id}`)).status),
+    );
+    assert.deepEqual(statuses.sort(), [200, 404], "exactly one row remains");
+
+    // 7. Two jobs the user acted on are never merged.
+    const r1 = job(10, runId);
+    const r2 = job(11, runId);
+    track(r1, r2);
+    await post([r1, r2]);
+    for (const j of [r1, r2])
+      await api(`/${j.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "review" }),
+      });
+    assert.equal((await post([withKeys(r1, [`id:${r2.id}`])])).merged, 0);
+    assert.equal((await api(`/${r2.id}`)).status, 200);
+  } finally {
+    for (const id of created) await api(`/${id}`, { method: "DELETE" });
+    await api(`/runs/${runId}`, { method: "DELETE" });
+  }
 });
