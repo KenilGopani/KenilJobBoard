@@ -33,17 +33,50 @@ type Run = {
 type ListResponse = {
   jobs: DiscoveredJobSummary[];
   counts: Partial<Record<DiscoveryStatus, number>>;
+  /** New jobs the hard filters rejected. */
+  filtered?: number;
   runs: Run[];
   error?: string;
 };
 
-const tabs: { status: DiscoveryStatus; label: string }[] = [
-  { status: "new", label: "New" },
-  { status: "review", label: "Review" },
-  { status: "saved", label: "Saved" },
-  { status: "applied", label: "Applied" },
-  { status: "skip", label: "Skipped" },
+/** Inbox tabs: the five statuses, plus new jobs the hard filters rejected. */
+type TabKey = DiscoveryStatus | "filtered";
+const tabs: { key: TabKey; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "review", label: "Review" },
+  { key: "saved", label: "Saved" },
+  { key: "applied", label: "Applied" },
+  { key: "skip", label: "Skipped" },
+  { key: "filtered", label: "Filtered out" },
 ];
+
+function tabQuery(key: TabKey): string {
+  if (key === "new") return "status=new&screening=kept";
+  if (key === "filtered") return "status=new&screening=rejected";
+  return `status=${key}`;
+}
+
+function tabCount(data: ListResponse | null, key: TabKey): number {
+  if (!data) return 0;
+  const filtered = data.filtered ?? 0;
+  if (key === "filtered") return filtered;
+  if (key === "new") return Math.max(0, (data.counts.new ?? 0) - filtered);
+  return data.counts[key] ?? 0;
+}
+
+const authorizationBadge: Record<string, { label: string; tone: string }> = {
+  compatible: { label: "Sponsors", tone: "ok" },
+  incompatible: { label: "No sponsorship", tone: "bad" },
+  "manual-review": { label: "Check work authorization", tone: "warn" },
+  unknown: { label: "Sponsorship unknown", tone: "muted" },
+};
+
+const checkTone: Record<string, string> = {
+  compatible: "ok",
+  incompatible: "bad",
+  "manual-review": "warn",
+  unknown: "muted",
+};
 
 const remoteLabel: Record<DiscoveredJobSummary["remoteType"], string> = {
   remote: "Remote",
@@ -78,7 +111,7 @@ export default function DiscoveredInbox({
   onPromote: (job: Job, message: string) => Promise<boolean>;
   onNewCount: (count: number) => void;
 }) {
-  const [status, setStatus] = useState<DiscoveryStatus>("new");
+  const [status, setStatus] = useState<TabKey>("new");
   const [data, setData] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -97,7 +130,7 @@ export default function DiscoveredInbox({
   useEffect(() => {
     if (demo) return;
     let cancelled = false;
-    fetch(`/api/discovered-jobs?status=${status}`)
+    fetch(`/api/discovered-jobs?${tabQuery(status)}`)
       .then(async (r) => {
         const b = (await r.json()) as ListResponse;
         if (!r.ok) throw new Error(b.error);
@@ -107,7 +140,7 @@ export default function DiscoveredInbox({
         if (cancelled) return;
         setData(b);
         setError("");
-        onNewCount(b.counts.new ?? 0);
+        onNewCount(tabCount(b, "new"));
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -238,7 +271,7 @@ export default function DiscoveredInbox({
         <div>
           <h2>
             Discovered jobs{" "}
-            <span className="count-pill">{data?.counts[status] ?? 0}</span>
+            <span className="count-pill">{tabCount(data, status)}</span>
           </h2>
           <p>
             {lastRun
@@ -257,18 +290,18 @@ export default function DiscoveredInbox({
       <div className="detail-tabs discovery-tabs" role="tablist">
         {tabs.map((t) => (
           <button
-            key={t.status}
+            key={t.key}
             role="tab"
-            aria-selected={status === t.status}
-            className={status === t.status ? "selected" : ""}
+            aria-selected={status === t.key}
+            className={status === t.key ? "selected" : ""}
             onClick={() => {
-              setStatus(t.status);
+              setStatus(t.key);
               setLoading(true);
               setOpen("");
               setDetail(null);
             }}
           >
-            {t.label} <small>{data?.counts[t.status] ?? 0}</small>
+            {t.label} <small>{tabCount(data, t.key)}</small>
           </button>
         ))}
       </div>
@@ -313,14 +346,18 @@ export default function DiscoveredInbox({
               ? "No matches"
               : status === "new"
                 ? "Nothing new yet"
-                : "Nothing here"}
+                : status === "filtered"
+                  ? "Nothing filtered out"
+                  : "Nothing here"}
           </h3>
           <p>
             {q
               ? "Try a different search."
               : status === "new"
                 ? 'Run a discovery search from ApplyPilot and push the results here, for example: npm run discover -- "applied ai engineer" --push'
-                : "Jobs you move to this list will appear here."}
+                : status === "filtered"
+                  ? "Jobs that fail your hard filters (location, level, required years, sponsorship, salary) wait here with the reason."
+                  : "Jobs you move to this list will appear here."}
           </p>
         </div>
       ) : (
@@ -349,6 +386,21 @@ export default function DiscoveredInbox({
                         {j.location || "Location not listed"}
                         <i>·</i>
                         {remoteLabel[j.remoteType]}
+                      </span>
+                      <span className="discovery-badges">
+                        {j.screeningVerdict === "review" && (
+                          <em className="tone-warn">Needs review</em>
+                        )}
+                        {j.screeningVerdict === "reject" && (
+                          <em className="tone-bad">Filtered out</em>
+                        )}
+                        {j.authorization && (
+                          <em
+                            className={`tone-${authorizationBadge[j.authorization]?.tone ?? "muted"}`}
+                          >
+                            {authorizationBadge[j.authorization]?.label}
+                          </em>
+                        )}
                       </span>
                     </div>
                   </button>
@@ -435,6 +487,21 @@ export default function DiscoveredInbox({
                             First seen {detail.firstSeenAt.slice(0, 10)}
                           </span>
                         </div>
+                        {detail.screening && (
+                          <ul className="discovery-checks">
+                            {detail.screening.checks.map((c, i) => (
+                              <li key={`${c.rule}-${i}`}>
+                                <em
+                                  className={`tone-${checkTone[c.status] ?? "muted"}`}
+                                >
+                                  {c.status.replace("-", " ")}
+                                </em>
+                                <span>{c.reason}</span>
+                                {c.evidence && <q>{c.evidence}</q>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                         <div className="discovery-description">
                           {detail.description ||
                             "This source did not include a description."}

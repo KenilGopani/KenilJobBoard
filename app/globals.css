@@ -2382,3 +2382,56 @@ tr:hover td {
     padding: 0 16px 16px;
   }
 }
+
+/* Discovered jobs: screening badges and checks */
+.role-cell .discovery-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.discovery-badges em,
+.discovery-checks em {
+  font-style: normal;
+  font-size: 8px;
+  border-radius: 5px;
+  padding: 3px 6px;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.tone-ok {
+  background: #ecf4ec;
+  color: #5f8a5c;
+}
+.tone-bad {
+  background: #fbebeb;
+  color: #b56f6f;
+}
+.tone-warn {
+  background: #fcf1df;
+  color: #a5813f;
+}
+.tone-muted {
+  background: #f1f2f3;
+  color: #8b9197;
+}
+.discovery-checks {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 10px;
+  color: #5d6663;
+}
+.discovery-checks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.discovery-checks q {
+  color: #8b9197;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
