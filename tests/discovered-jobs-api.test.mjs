@@ -138,7 +138,7 @@ test("discovered jobs API imports idempotently, keeps provenance and decisions, 
       "list omits descriptions",
     );
     assert.ok(
-      skipped.runs.some((r) => r.runId === runA && r.jobsReceived === 4),
+      skipped.runs.some((r) => r.runId === runA && r.jobsReceived === 2),
     );
 
     const promoted = await api(`/${jobs[1].id}`, {

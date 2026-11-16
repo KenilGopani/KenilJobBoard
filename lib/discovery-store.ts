@@ -140,6 +140,11 @@ export async function importDiscovery(
       });
   });
   const created = jobs.filter((j) => !existing.has(j.id)).length;
+  // Jobs this run has not reported before. Re-sending a run (a retry, or
+  // `npm run push` of a saved run) then leaves its counts unchanged.
+  const firstSightings = jobs.filter(
+    (j) => !(existing.get(j.id) ?? []).some((p) => p.runId === run.runId),
+  ).length;
 
   const runStatement = db
     .insert(discoveryRuns)
@@ -151,7 +156,7 @@ export async function importDiscovery(
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
       metrics: JSON.stringify(run.metrics),
-      jobsReceived: jobs.length,
+      jobsReceived: firstSightings,
       jobsNew: created,
       importedAt: now,
     })
@@ -162,7 +167,7 @@ export async function importDiscovery(
         status: run.status,
         finishedAt: run.finishedAt,
         metrics: JSON.stringify(run.metrics),
-        jobsReceived: sql`${discoveryRuns.jobsReceived} + ${jobs.length}`,
+        jobsReceived: sql`${discoveryRuns.jobsReceived} + ${firstSightings}`,
         jobsNew: sql`${discoveryRuns.jobsNew} + ${created}`,
         importedAt: now,
       },
