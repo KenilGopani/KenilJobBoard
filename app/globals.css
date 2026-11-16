@@ -2435,3 +2435,58 @@ tr:hover td {
   font-style: italic;
   overflow-wrap: anywhere;
 }
+
+/* Discovered jobs: evaluation */
+.discovery-sort {
+  border: 1px solid #e2e5e6;
+  border-radius: 7px;
+  background: white;
+  font-size: 11px;
+  padding: 8px 10px;
+  color: #5d6663;
+}
+.discovery-evaluation {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: #5d6663;
+}
+.discovery-evaluation h4 {
+  font-size: 12px;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+.discovery-evaluation h5 {
+  font-size: 10px;
+  margin: 12px 0 4px;
+  color: #8b9197;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.discovery-evaluation ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.discovery-evaluation li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+.discovery-evaluation q {
+  color: #8b9197;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.discovery-evaluation em {
+  font-style: normal;
+  font-size: 8px;
+  border-radius: 5px;
+  padding: 3px 6px;
+}

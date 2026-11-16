@@ -71,6 +71,12 @@ const authorizationBadge: Record<string, { label: string; tone: string }> = {
   unknown: { label: "Sponsorship unknown", tone: "muted" },
 };
 
+const decisionLabel: Record<string, string> = {
+  apply: "Apply",
+  review: "Consider",
+  skip: "Skip",
+};
+
 const checkTone: Record<string, string> = {
   compatible: "ok",
   incompatible: "bad",
@@ -116,6 +122,7 @@ export default function DiscoveredInbox({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"recent" | "match">("recent");
   const [open, setOpen] = useState("");
   const [detail, setDetail] = useState<DiscoveredJobDetail | null>(null);
   const [busy, setBusy] = useState("");
@@ -255,7 +262,7 @@ export default function DiscoveredInbox({
   }
 
   const q = query.trim().toLowerCase();
-  const jobs = (data?.jobs ?? []).filter(
+  const matching = (data?.jobs ?? []).filter(
     (j) =>
       !q ||
       [j.title, j.company, j.location ?? "", j.sites.join(" ")]
@@ -263,6 +270,17 @@ export default function DiscoveredInbox({
         .toLowerCase()
         .includes(q),
   );
+  // Best match: full evaluations first, then triage, then unevaluated; higher score first.
+  const rank = (j: DiscoveredJobSummary) =>
+    j.evaluationStage === "full" ? 2 : j.evaluationStage === "triage" ? 1 : 0;
+  const jobs =
+    sort === "match"
+      ? [...matching].sort(
+          (a, b) =>
+            rank(b) - rank(a) ||
+            (b.evaluationScore ?? 0) - (a.evaluationScore ?? 0),
+        )
+      : matching;
   const lastRun = data?.runs[0];
 
   return (
@@ -306,6 +324,15 @@ export default function DiscoveredInbox({
         ))}
       </div>
       <div className="table-tools">
+        <select
+          aria-label="Sort discovered jobs"
+          className="discovery-sort"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as "recent" | "match")}
+        >
+          <option value="recent">Newest</option>
+          <option value="match">Best match</option>
+        </select>
         <div className="search-input">
           <Search size={16} />
           <input
@@ -388,6 +415,25 @@ export default function DiscoveredInbox({
                         {remoteLabel[j.remoteType]}
                       </span>
                       <span className="discovery-badges">
+                        {j.evaluationStage === "full" &&
+                          j.evaluationScore != null && (
+                            <em
+                              className={`tone-${j.evaluationDecision === "apply" ? "ok" : j.evaluationDecision === "skip" ? "bad" : "warn"}`}
+                            >
+                              {j.evaluationScore.toFixed(1)}/5 ·{" "}
+                              {decisionLabel[j.evaluationDecision ?? ""] ??
+                                j.evaluationDecision}
+                            </em>
+                          )}
+                        {j.evaluationStage === "triage" &&
+                          j.evaluationScore != null && (
+                            <em
+                              className={`tone-${j.evaluationDecision === "PASS" ? "ok" : j.evaluationDecision === "MARGINAL" ? "warn" : "muted"}`}
+                            >
+                              Quick check {j.evaluationScore.toFixed(1)} ·{" "}
+                              {j.evaluationDecision?.toLowerCase()}
+                            </em>
+                          )}
                         {j.screeningVerdict === "review" && (
                           <em className="tone-warn">Needs review</em>
                         )}
@@ -487,6 +533,66 @@ export default function DiscoveredInbox({
                             First seen {detail.firstSeenAt.slice(0, 10)}
                           </span>
                         </div>
+                        {detail.evaluation?.stage === "full" && (
+                          <div className="discovery-evaluation">
+                            <h4>
+                              Career Ops evaluation:{" "}
+                              {detail.evaluation.evaluation.score.toFixed(1)}/5
+                              ·{" "}
+                              {decisionLabel[
+                                detail.evaluation.evaluation.decision
+                              ] ?? detail.evaluation.evaluation.decision}
+                            </h4>
+                            <p>{detail.evaluation.evaluation.explanation}</p>
+                            {detail.evaluation.evaluation.matched.length >
+                              0 && (
+                              <>
+                                <h5>Matches, with your CV&apos;s own words</h5>
+                                <ul>
+                                  {detail.evaluation.evaluation.matched.map(
+                                    (m) => (
+                                      <li key={m.requirement.id}>
+                                        <strong>{m.requirement.text}</strong>
+                                        {m.evidence.map((e, i) => (
+                                          <q key={i}>{e.excerpt}</q>
+                                        ))}
+                                      </li>
+                                    ),
+                                  )}
+                                </ul>
+                              </>
+                            )}
+                            {detail.evaluation.evaluation.missing.length >
+                              0 && (
+                              <>
+                                <h5>Gaps</h5>
+                                <ul>
+                                  {detail.evaluation.evaluation.missing.map(
+                                    (m) => (
+                                      <li key={m.id}>
+                                        <strong>{m.text}</strong>
+                                        {m.category === "unverified-match" && (
+                                          <em className="tone-warn">
+                                            claimed, but not found in your CV
+                                          </em>
+                                        )}
+                                      </li>
+                                    ),
+                                  )}
+                                </ul>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {detail.evaluation?.stage === "triage" && (
+                          <div className="discovery-evaluation">
+                            <h4>
+                              Quick check: {detail.evaluation.score.toFixed(1)}
+                              /5 · {detail.evaluation.verdict.toLowerCase()}
+                            </h4>
+                            <p>{detail.evaluation.reason}</p>
+                          </div>
+                        )}
                         {detail.screening && (
                           <ul className="discovery-checks">
                             {detail.screening.checks.map((c, i) => (

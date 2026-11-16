@@ -89,6 +89,72 @@ export const screeningSchema = z.object({
 });
 export type Screening = z.infer<typeof screeningSchema>;
 
+const evaluationRequirement = z.object({
+  id: z.string().min(1).max(100),
+  text: z.string().min(1).max(1000),
+  importance: z.enum([
+    "critical",
+    "high",
+    "meaningful",
+    "nice-to-have",
+    "unknown",
+  ]),
+  category: z.string().max(100).optional(),
+  jdSignal: z.string().max(500).optional(),
+});
+
+/**
+ * An evaluation from ApplyPilot: a quick triage line, or Career Ops' full
+ * evaluation as a CanonicalJobEvaluation. Every matched requirement carries
+ * evidence quoted from the CV; claims ApplyPilot could not verify arrive in
+ * `missing` with category "unverified-match".
+ */
+export const evaluationPayloadSchema = z.discriminatedUnion("stage", [
+  z.object({
+    stage: z.literal("triage"),
+    evaluator: z.string().min(1).max(100),
+    evaluatedAt: isoDateTime,
+    verdict: z.enum(["PASS", "MARGINAL", "FAIL", "SKIP"]),
+    score: z.number().min(0).max(5),
+    reason: z.string().max(500),
+  }),
+  z.object({
+    stage: z.literal("full"),
+    evaluation: z.object({
+      evaluator: z.string().min(1).max(100),
+      evaluatorVersion: z.string().max(200).optional(),
+      evaluatedAt: isoDateTime,
+      score: z.number().min(1).max(5),
+      scoreScale: z.object({ min: z.number(), max: z.number() }),
+      decision: z.enum(["apply", "review", "skip"]),
+      confidence: z.number().min(0).max(1),
+      matched: z
+        .array(
+          z.object({
+            requirement: evaluationRequirement,
+            evidence: z
+              .array(
+                z
+                  .object({
+                    document: z.string().max(200),
+                    excerpt: z.string().min(1).max(2000),
+                  })
+                  .passthrough(),
+              )
+              .min(1),
+          }),
+        )
+        .max(60),
+      missing: z.array(evaluationRequirement).max(60),
+      workAuthorization: z.enum(screeningSignals),
+      roleClassification: z.string().max(200).optional(),
+      explanation: z.string().max(20000),
+      nativeReport: z.string().max(1000).optional(),
+    }),
+  }),
+]);
+export type EvaluationPayload = z.infer<typeof evaluationPayloadSchema>;
+
 export const ingestJobSchema = z.object({
   id: z.string().regex(/^job_[0-9a-f]{16}$/),
   externalId: z.string().min(1).max(200).optional(),
@@ -171,10 +237,14 @@ export type DiscoveredJobSummary = {
   promotedJobId: string | null;
   screeningVerdict: Screening["verdict"] | null;
   authorization: Screening["authorization"] | null;
+  evaluationStage: EvaluationPayload["stage"] | null;
+  evaluationScore: number | null;
+  evaluationDecision: string | null;
 };
 
 export type DiscoveredJobDetail = DiscoveredJobSummary & {
   screening: Screening | null;
+  evaluation: EvaluationPayload | null;
   description: string | null;
   provenance: Provenance[];
   rawSource: unknown;

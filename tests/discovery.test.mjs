@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  evaluationPayloadSchema,
   fillMissing,
   KEY_PRIORITY,
   keyRank,
@@ -257,5 +258,60 @@ test("imports accept an ApplyPilot screening and reject malformed ones", () => {
       screening: { ...screening, verdict: "maybe" },
     }).success,
     false,
+  );
+});
+
+test("evaluation payloads: triage lines and full evaluations with evidence are accepted", () => {
+  const triage = {
+    stage: "triage",
+    evaluator: "career-ops triage",
+    evaluatedAt: at,
+    verdict: "PASS",
+    score: 4.1,
+    reason: "fits",
+  };
+  assert.equal(evaluationPayloadSchema.safeParse(triage).success, true);
+  assert.equal(
+    evaluationPayloadSchema.safeParse({ ...triage, verdict: "MAYBE" }).success,
+    false,
+  );
+  const full = {
+    stage: "full",
+    evaluation: {
+      evaluator: "career-ops",
+      evaluatedAt: at,
+      score: 4.4,
+      scoreScale: { min: 1, max: 5 },
+      decision: "apply",
+      confidence: 0.6,
+      matched: [
+        {
+          requirement: {
+            id: "r1",
+            text: "Python APIs",
+            importance: "critical",
+          },
+          evidence: [{ document: "cv.md", excerpt: "Built FastAPI services" }],
+        },
+      ],
+      missing: [
+        {
+          id: "r2",
+          text: "Kafka",
+          importance: "high",
+          category: "unverified-match",
+        },
+      ],
+      workAuthorization: "unknown",
+      explanation: "Apply.",
+    },
+  };
+  assert.equal(evaluationPayloadSchema.safeParse(full).success, true);
+  const noEvidence = structuredClone(full);
+  noEvidence.evaluation.matched[0].evidence = [];
+  assert.equal(
+    evaluationPayloadSchema.safeParse(noEvidence).success,
+    false,
+    "a match needs evidence",
   );
 });

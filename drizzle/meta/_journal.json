@@ -29,6 +29,13 @@
       "when": 1794803497514,
       "tag": "0003_discovered_job_screening",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794804019336,
+      "tag": "0004_discovered_job_evaluation",
+      "breakpoints": true
     }
   ]
 }

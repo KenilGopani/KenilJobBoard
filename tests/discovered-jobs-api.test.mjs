@@ -390,3 +390,92 @@ test("screened jobs are stored with their checks, and rejected ones leave the in
     await api(`/runs/${runId}`, { method: "DELETE" });
   }
 });
+
+test("evaluations are stored on a job, shown in the list, and a quick check never overwrites a full evaluation", async () => {
+  const runId = `run_qa_eval_${randomBytes(4).toString("hex")}`;
+  const j = job(1, runId);
+  const put = (body) =>
+    api(`/${j.id}/evaluation`, { method: "PUT", body: JSON.stringify(body) });
+  const triage = {
+    stage: "triage",
+    evaluator: "career-ops triage",
+    evaluatedAt: at,
+    verdict: "PASS",
+    score: 4.1,
+    reason: "fits",
+  };
+  const full = {
+    stage: "full",
+    evaluation: {
+      evaluator: "career-ops",
+      evaluatedAt: at,
+      score: 4.4,
+      scoreScale: { min: 1, max: 5 },
+      decision: "apply",
+      confidence: 0.6,
+      matched: [
+        {
+          requirement: {
+            id: "r1",
+            text: "Python APIs",
+            importance: "critical",
+          },
+          evidence: [{ document: "cv.md", excerpt: "Built FastAPI services" }],
+        },
+      ],
+      missing: [],
+      workAuthorization: "unknown",
+      explanation: "Apply. Strong overlap.",
+    },
+  };
+  try {
+    await api("", {
+      method: "POST",
+      body: JSON.stringify({ run: run(runId), jobs: [j] }),
+    });
+    assert.equal((await put(triage)).status, 200);
+    let row = (await (await api(`/${j.id}`)).json()).job;
+    assert.deepEqual(
+      [row.evaluationStage, row.evaluationScore, row.evaluationDecision],
+      ["triage", 4.1, "PASS"],
+    );
+    assert.equal((await (await put(full)).json()).result, "stored");
+    assert.equal((await (await put(triage)).json()).result, "kept-full");
+    row = (await (await api(`/${j.id}`)).json()).job;
+    assert.deepEqual(
+      [row.evaluationStage, row.evaluationScore, row.evaluationDecision],
+      ["full", 4.4, "apply"],
+    );
+    assert.equal(
+      row.evaluation.evaluation.matched[0].evidence[0].excerpt,
+      "Built FastAPI services",
+    );
+    const listed = (await (await api("?status=new")).json()).jobs.find(
+      (x) => x.id === j.id,
+    );
+    assert.equal(listed.evaluationScore, 4.4);
+    assert.equal((await put({ ...triage, score: 9 })).status, 400);
+    assert.equal(
+      (
+        await api(`/job_0000000000000000/evaluation`, {
+          method: "PUT",
+          body: JSON.stringify(triage),
+        })
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await api(`/${j.id}/evaluation`, {
+          method: "PUT",
+          body: JSON.stringify(triage),
+          headers: { Origin: "https://evil.example" },
+        })
+      ).status,
+      403,
+    );
+  } finally {
+    await api(`/${j.id}`, { method: "DELETE" });
+    await api(`/runs/${runId}`, { method: "DELETE" });
+  }
+});

@@ -24,6 +24,7 @@ import {
   type IngestJob,
   type IngestRun,
   type Provenance,
+  type EvaluationPayload,
   type Screening,
 } from "./discovery.ts";
 
@@ -77,7 +78,20 @@ function summary(
       null) as DiscoveredJobSummary["screeningVerdict"],
     authorization: (row.authorization ??
       null) as DiscoveredJobSummary["authorization"],
+    evaluationStage: (row.evaluationStage ??
+      null) as DiscoveredJobSummary["evaluationStage"],
+    evaluationScore: row.evaluationScore ?? null,
+    evaluationDecision: row.evaluationDecision ?? null,
   };
+}
+
+function parseJson<T>(text: string | null): T | null {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
 }
 
 function parseScreening(text: string | null): Screening | null {
@@ -113,6 +127,7 @@ function detail(row: Row): DiscoveredJobDetail {
     provenance: parseProvenance(row.provenance),
     rawSource,
     screening: parseScreening(row.screening),
+    evaluation: parseJson<EvaluationPayload>(row.evaluation),
   };
 }
 
@@ -418,6 +433,11 @@ export async function importDiscovery(
         screeningVerdict: null,
         authorization: null,
         screening: null,
+        evaluationStage: null,
+        evaluationScore: null,
+        evaluationDecision: null,
+        evaluation: null,
+        evaluatedAt: null,
       }),
       ...stored,
     });
@@ -596,4 +616,43 @@ export async function deleteRun(db: Db, userId: string, runId: string) {
     )
     .returning({ runId: discoveryRuns.runId });
   return rows.length > 0;
+}
+
+/**
+ * Store an evaluation from ApplyPilot. A full evaluation replaces anything
+ * before it; a triage result never overwrites a full evaluation.
+ */
+export async function setEvaluation(
+  db: Db,
+  userId: string,
+  id: string,
+  payload: EvaluationPayload,
+): Promise<"stored" | "kept-full" | "not-found"> {
+  const [row] = await db
+    .select({ stage: discoveredJobs.evaluationStage })
+    .from(discoveredJobs)
+    .where(and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.id, id)));
+  if (!row) return "not-found";
+  if (payload.stage === "triage" && row.stage === "full") return "kept-full";
+  const values =
+    payload.stage === "full"
+      ? {
+          evaluationStage: "full",
+          evaluationScore: payload.evaluation.score,
+          evaluationDecision: payload.evaluation.decision,
+          evaluation: JSON.stringify(payload),
+          evaluatedAt: payload.evaluation.evaluatedAt,
+        }
+      : {
+          evaluationStage: "triage",
+          evaluationScore: payload.score,
+          evaluationDecision: payload.verdict,
+          evaluation: JSON.stringify(payload),
+          evaluatedAt: payload.evaluatedAt,
+        };
+  await db
+    .update(discoveredJobs)
+    .set(values)
+    .where(and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.id, id)));
+  return "stored";
 }

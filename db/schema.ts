@@ -53,6 +53,15 @@ export const discoveredJobs = sqliteTable(
     authorization: text("authorization"),
     /** JSON of the full screening (checks with reasons and evidence). */
     screening: text("screening"),
+    /** "triage" (quick first pass) or "full" (Career Ops A-G evaluation). */
+    evaluationStage: text("evaluation_stage"),
+    /** Score on Career Ops' 1-5 scale. */
+    evaluationScore: real("evaluation_score"),
+    /** Triage: PASS | MARGINAL | FAIL | SKIP. Full: apply | review | skip. */
+    evaluationDecision: text("evaluation_decision"),
+    /** JSON of the triage line or the full CanonicalJobEvaluation. */
+    evaluation: text("evaluation"),
+    evaluatedAt: text("evaluated_at"),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
