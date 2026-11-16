@@ -231,3 +231,31 @@ test("merging fills only missing fields and moves salary as one unit", () => {
     {},
   );
 });
+
+test("imports accept an ApplyPilot screening and reject malformed ones", () => {
+  const screening = {
+    verdict: "reject",
+    authorization: "incompatible",
+    checks: [
+      {
+        rule: "work-authorization",
+        status: "incompatible",
+        reason: "The posting rules out sponsorship",
+        evidence: "We are not able to sponsor visas.",
+      },
+    ],
+    screenedAt: at,
+    policyVersion: "filters@1",
+  };
+  assert.equal(
+    ingestJobSchema.safeParse({ ...canonical, screening }).success,
+    true,
+  );
+  assert.equal(
+    ingestJobSchema.safeParse({
+      ...canonical,
+      screening: { ...screening, verdict: "maybe" },
+    }).success,
+    false,
+  );
+});

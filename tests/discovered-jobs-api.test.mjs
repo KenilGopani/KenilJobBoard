@@ -314,3 +314,79 @@ test("imports merge the same posting across sources, respect conflicting ids, an
     await api(`/runs/${runId}`, { method: "DELETE" });
   }
 });
+
+test("screened jobs are stored with their checks, and rejected ones leave the inbox for Filtered out", async () => {
+  const runId = `run_qa_screen_${randomBytes(4).toString("hex")}`;
+  const screening = (verdict, authorization) => ({
+    verdict,
+    authorization,
+    checks: [
+      {
+        rule: "work-authorization",
+        status: authorization,
+        reason: "From the posting",
+        ...(authorization === "incompatible"
+          ? { evidence: "We are not able to sponsor visas." }
+          : {}),
+      },
+    ],
+    screenedAt: at,
+    policyVersion: "filters@1",
+  });
+  const kept = { ...job(1, runId), screening: screening("pass", "unknown") };
+  const rejected = {
+    ...job(2, runId),
+    screening: screening("reject", "incompatible"),
+  };
+  const unscreened = job(3, runId);
+  try {
+    const res = await api("", {
+      method: "POST",
+      body: JSON.stringify({
+        run: run(runId),
+        jobs: [kept, rejected, unscreened],
+      }),
+    });
+    assert.equal(res.status, 200);
+    const inbox = await (await api("?status=new&screening=kept")).json();
+    const ids = inbox.jobs.map((j) => j.id);
+    assert.ok(
+      ids.includes(kept.id) && ids.includes(unscreened.id),
+      "unscreened jobs stay in the inbox",
+    );
+    assert.ok(!ids.includes(rejected.id));
+    const filtered = await (await api("?status=new&screening=rejected")).json();
+    assert.deepEqual(
+      filtered.jobs
+        .map((j) => j.id)
+        .filter((id) => [kept.id, rejected.id, unscreened.id].includes(id)),
+      [rejected.id],
+    );
+    assert.ok(filtered.filtered >= 1);
+    const row = filtered.jobs.find((j) => j.id === rejected.id);
+    assert.equal(row.screeningVerdict, "reject");
+    assert.equal(row.authorization, "incompatible");
+    const detail = (await (await api(`/${rejected.id}`)).json()).job;
+    assert.equal(
+      detail.screening.checks[0].evidence,
+      "We are not able to sponsor visas.",
+    );
+    // A later import without screening keeps the stored one.
+    await api("", {
+      method: "POST",
+      body: JSON.stringify({
+        run: run(runId),
+        jobs: [{ ...rejected, screening: undefined }],
+      }),
+    });
+    assert.equal(
+      (await (await api(`/${rejected.id}`)).json()).job.screeningVerdict,
+      "reject",
+    );
+    assert.equal((await api("?screening=bogus")).status, 400);
+  } finally {
+    for (const j of [kept, rejected, unscreened])
+      await api(`/${j.id}`, { method: "DELETE" });
+    await api(`/runs/${runId}`, { method: "DELETE" });
+  }
+});
