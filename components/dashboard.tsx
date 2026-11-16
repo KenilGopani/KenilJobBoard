@@ -60,6 +60,7 @@ import {
   withStatusChange,
 } from "@/lib/workspace";
 import JobTimeline from "@/components/job-timeline";
+import AnalyticsPanel from "@/components/analytics-panel";
 const navs = [
   { name: "Overview", icon: LayoutDashboard },
   { name: "Discovered", icon: Radar },
@@ -67,6 +68,7 @@ const navs = [
   { name: "Resume studio", icon: FileText },
   { name: "Outreach", icon: Mail },
   { name: "Follow-ups", icon: CalendarDays },
+  { name: "Analytics", icon: Target },
 ];
 const sourceLinks = [
   ["LinkedIn", "https://www.linkedin.com/jobs/", "in"],
@@ -547,7 +549,9 @@ export default function Home() {
                           ? "Start a meaningful conversation."
                           : page === "Follow-ups"
                             ? "Keep the conversation moving."
-                            : "Your workspace, your way."}
+                            : page === "Analytics"
+                              ? "Learn what is working."
+                              : "Your workspace, your way."}
               </h1>
               <p>
                 {page === "Overview"
@@ -562,7 +566,9 @@ export default function Home() {
                           ? "Thoughtful drafts grounded in the role and the resume you provide."
                           : page === "Follow-ups"
                             ? "Deadlines and next steps, without the mental tabs."
-                            : "Manage your goals, backups, and the way you work."}
+                            : page === "Analytics"
+                              ? "Which roles, resumes and sources turn applications into interviews."
+                              : "Manage your goals, backups, and the way you work."}
               </p>
             </div>
             <div className="heading-actions">
@@ -1550,6 +1556,9 @@ export default function Home() {
                   }
                   onNewCount={onDiscoveredCount}
                 />
+              )}
+              {page === "Analytics" && (
+                <AnalyticsPanel demo={demo} demoJobs={jobs} />
               )}
               {page === "Follow-ups" && (
                 <section className="panel">

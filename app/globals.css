@@ -2578,3 +2578,35 @@ tr:hover td {
   font-size: 11px;
   flex: 1 1 140px;
 }
+
+/* Analytics */
+.analytics {
+  display: grid;
+  gap: 16px;
+}
+.analytics-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 18px 20px;
+}
+.analytics-summary span {
+  display: block;
+  font-size: 10px;
+  color: #8b9197;
+}
+.analytics-summary strong {
+  font-size: 22px;
+  font-family: Georgia, serif;
+  font-weight: 400;
+  color: var(--ink);
+}
+.analytics-insights ul {
+  margin: 0;
+  padding: 16px 20px 16px 36px;
+  font-size: 11px;
+  color: #5d6663;
+}
+.analytics-table td {
+  font-size: 10px;
+}
