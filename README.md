@@ -28,6 +28,7 @@ A serious job search quickly spreads across job boards, browser tabs, notes, cal
 - Receives jobs found by automated search ([ApplyPilot](https://github.com/KenilGopani/ApplyPilot) runs JobSpy and pushes canonical jobs to `/api/discovered-jobs`).
 - Keeps them in their own table, separate from application stages, with statuses New, Review, Saved, Applied and Skipped.
 - Re-imports are idempotent: a decision you made is never reset, and each new sighting of a posting is added to its source history.
+- The same posting found on several sources (for example LinkedIn and the employer's Greenhouse board) becomes one job. ApplyPilot sends identity keys with each job, and an import that shares a key merges into the job already stored, filling only what it lacks. Jobs with different ATS or requisition ids are never merged, and a job you already acted on is never folded away.
 - Save or Applied turns a discovered job into an opportunity, linked back through `discoveredJobId`. Sponsorship, authorization and level stay unknown until you verify them.
 
 ### Opportunity tracking
@@ -147,7 +148,7 @@ node --import ./scripts/sites-env.mjs \
   --file drizzle/0000_keen_senator_kelly.sql
 ```
 
-Then apply `drizzle/0001_discovered_jobs.sql` the same way. Apply each migration only once to a given local database. Local and production D1 data are separate.
+Then apply `drizzle/0001_discovered_jobs.sql` and `drizzle/0002_discovered_job_keys.sql` the same way. Apply each migration only once to a given local database. Local and production D1 data are separate.
 
 ### Start the app
 
@@ -179,6 +180,7 @@ The test suite covers:
 - authentication and origin enforcement
 - D1 persistence and stale-write conflicts
 - discovered-job imports: validation, idempotent re-import, preserved decisions, provenance merging, promotion and cleanup
+- cross-source merging: shared keys merge, conflicting ATS ids stay apart, acted-on jobs survive, legacy copies fold
 
 API tests use only the local mock identity and restore the starting workspace after the test completes.
 
