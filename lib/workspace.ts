@@ -54,6 +54,27 @@ const date = z
         new Date(v).toISOString().slice(0, 10) === v),
     "Use a valid date",
   );
+export const activityTypes = [
+  "created",
+  "status",
+  "follow-up-scheduled",
+  "interview",
+] as const;
+export const activitySchema = z.object({
+  at: z.string().max(50),
+  type: z.enum(activityTypes),
+  from: z.string().max(50).optional(),
+  to: z.string().max(50).optional(),
+  note: z.string().max(500).optional(),
+});
+export type Activity = z.infer<typeof activitySchema>;
+export const interviewSchema = z.object({
+  date,
+  round: z.string().trim().min(1).max(100),
+  notes: z.string().max(2000),
+});
+export type InterviewRound = z.infer<typeof interviewSchema>;
+
 export const jobSchema = z.object({
   id: z.string().min(1).max(100),
   company: z.string().trim().min(1).max(150),
@@ -86,6 +107,10 @@ export const jobSchema = z.object({
   recruiter: z.string().max(200),
   createdAt: z.string().max(50),
   reminderDone: z.boolean(),
+  /** What happened to this opportunity, oldest first. */
+  activity: z.array(activitySchema).max(300).optional(),
+  /** Interview rounds, in the order they were logged. */
+  interviews: z.array(interviewSchema).max(50).optional(),
   /** Set when the opportunity was saved from the Discovered inbox. */
   discoveredJobId: z.string().min(1).max(100).optional(),
 });
@@ -334,4 +359,77 @@ export function demoJobs(): Job[] {
     deadline: i === 2 ? daysFromNow(3) : "",
     appliedAt: [0, 1, 3, 5].includes(i) ? daysFromNow(-i - 1) : "",
   }));
+}
+
+/** Days until the next follow-up after entering a stage. */
+export const FOLLOW_UP_DAYS: Partial<Record<Job["status"], number>> = {
+  Applied: 7,
+  Screening: 5,
+  Interview: 3,
+  Offer: 2,
+};
+const CLOSED: Job["status"][] = ["Rejected", "Withdrawn"];
+
+function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Apply the pipeline rules to a saved opportunity: record what changed in its
+ * timeline, date the application, schedule the next follow-up when the stage
+ * calls for one (unless a future follow-up is already set) and stop reminders
+ * once the process is closed. Pure; the caller saves the result.
+ */
+export function withStatusChange(
+  prev: Job | undefined,
+  next: Job,
+  day = today(),
+  at = new Date().toISOString(),
+): Job {
+  const activity = [...(next.activity ?? [])];
+  let job: Job = { ...next };
+  if (!prev) activity.push({ at, type: "created", to: next.status });
+  else if (prev.status !== next.status) {
+    activity.push({ at, type: "status", from: prev.status, to: next.status });
+  }
+  const changed = !prev || prev.status !== next.status;
+  if (changed) {
+    if (job.status === "Applied" && !job.appliedAt) job.appliedAt = day;
+    const days = FOLLOW_UP_DAYS[job.status];
+    const hasFuture = job.followUp && job.followUp > day && !job.reminderDone;
+    if (days !== undefined && !hasFuture) {
+      job.followUp = addDays(day, days);
+      job.reminderDone = false;
+      activity.push({
+        at,
+        type: "follow-up-scheduled",
+        to: job.followUp,
+        note: `${days} days after ${job.status}`,
+      });
+    }
+    if (CLOSED.includes(job.status)) {
+      job = { ...job, followUp: "", reminderDone: true };
+    }
+  }
+  return { ...job, activity: activity.slice(-300) };
+}
+
+/** Log an interview round; moves the opportunity to Interview if it is earlier in the pipeline. */
+export function logInterview(
+  job: Job,
+  round: InterviewRound,
+  at = new Date().toISOString(),
+): Job {
+  const interviews = [...(job.interviews ?? []), round];
+  const activity = [
+    ...(job.activity ?? []),
+    { at, type: "interview" as const, note: `${round.round} on ${round.date}` },
+  ];
+  const earlier: Job["status"][] = ["Saved", "Applied", "Screening"];
+  const next = { ...job, interviews, activity };
+  return earlier.includes(job.status)
+    ? withStatusChange(job, { ...next, status: "Interview" }, round.date, at)
+    : next;
 }
