@@ -544,3 +544,12 @@ test("an application prep bundle is stored and shown; nothing else changes", asy
     await api(`/runs/${runId}`, { method: "DELETE" });
   }
 });
+
+test("analytics are private and computed from the workspace", async () => {
+  assert.equal((await fetch(`${base}/api/analytics`)).status, 401);
+  const res = await fetch(`${base}/api/analytics`, { headers });
+  assert.equal(res.status, 200);
+  const a = await res.json();
+  assert.equal(typeof a.overall.applied, "number");
+  assert.ok(Array.isArray(a.insights));
+});
