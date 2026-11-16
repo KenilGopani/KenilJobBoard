@@ -86,6 +86,16 @@ export const ingestJobSchema = z.object({
   discoveredAt: isoDateTime,
   provenance: z.array(provenanceSchema).min(1).max(50),
   rawSource: z.unknown().optional(),
+  /** Identity keys from ApplyPilot's dedup engine, e.g. "ats:greenhouse:123". */
+  dedupKeys: z
+    .array(
+      z
+        .string()
+        .regex(/^[a-z]+:.+/)
+        .max(600),
+    )
+    .max(60)
+    .optional(),
 });
 export type IngestJob = z.infer<typeof ingestJobSchema>;
 
@@ -235,4 +245,97 @@ export function toWorkspaceJob(
     notes: notes.slice(0, 20000),
     discoveredJobId: discovered.id,
   };
+}
+
+/**
+ * Key kinds, strongest first (ApplyPilot's dedup engine defines them). When an
+ * import shares keys with several existing jobs, the one matched by the
+ * strongest kind wins.
+ */
+export const KEY_PRIORITY = ["id", "url", "ats", "req", "fp", "cctl"] as const;
+
+export function keyRank(key: string): number {
+  const rank = (KEY_PRIORITY as readonly string[]).indexOf(
+    key.slice(0, key.indexOf(":")),
+  );
+  return rank === -1 ? KEY_PRIORITY.length : rank;
+}
+
+/** ATS job ids and requisition ids name exactly one opening. */
+function conflictScope(key: string): string | null {
+  if (key.startsWith("ats:")) return key.slice(0, key.indexOf(":", 4) + 1);
+  if (key.startsWith("req:")) return key.slice(0, key.lastIndexOf(":") + 1);
+  return null;
+}
+
+/** True when the two jobs' keys name different openings, so they must not merge. */
+export function keysConflict(
+  a: Iterable<string>,
+  b: Iterable<string>,
+): boolean {
+  const scoped = new Map<string, Set<string>>();
+  for (const key of a) {
+    const scope = conflictScope(key);
+    if (scope) {
+      if (!scoped.has(scope)) scoped.set(scope, new Set());
+      scoped.get(scope)!.add(key);
+    }
+  }
+  for (const key of b) {
+    const scope = conflictScope(key);
+    const mine = scope ? scoped.get(scope) : undefined;
+    if (mine && !mine.has(key)) return true;
+  }
+  return false;
+}
+
+/** Fields an existing discovered job may be missing that a duplicate can supply. */
+export type FillableFields = {
+  location: string | null;
+  postedAt: string | null;
+  employmentType: string | null;
+  description: string | null;
+  remoteType: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  salaryInterval: string | null;
+};
+
+/**
+ * Fill only what the existing job lacks; never overwrite what it has. Salary
+ * moves as one unit so a range never mixes two sources.
+ */
+export function fillMissing(
+  existing: FillableFields,
+  incoming: Partial<FillableFields>,
+): Partial<FillableFields> {
+  const patch: Partial<FillableFields> = {};
+  for (const field of [
+    "location",
+    "postedAt",
+    "employmentType",
+    "description",
+  ] as const) {
+    if (existing[field] == null && incoming[field] != null)
+      patch[field] = incoming[field];
+  }
+  if (
+    existing.remoteType === "unknown" &&
+    incoming.remoteType &&
+    incoming.remoteType !== "unknown"
+  ) {
+    patch.remoteType = incoming.remoteType;
+  }
+  if (
+    existing.salaryMin == null &&
+    existing.salaryMax == null &&
+    (incoming.salaryMin != null || incoming.salaryMax != null)
+  ) {
+    patch.salaryMin = incoming.salaryMin ?? null;
+    patch.salaryMax = incoming.salaryMax ?? null;
+    patch.salaryCurrency = incoming.salaryCurrency ?? null;
+    patch.salaryInterval = incoming.salaryInterval ?? null;
+  }
+  return patch;
 }

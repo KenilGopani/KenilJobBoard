@@ -1,8 +1,12 @@
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import type { getDb } from "@/db";
-import { discoveredJobs, discoveryRuns } from "@/db/schema";
+import { discoveredJobKeys, discoveredJobs, discoveryRuns } from "@/db/schema";
+import type { BatchItem } from "drizzle-orm/batch";
 import {
   distinctSites,
+  fillMissing,
+  keyRank,
+  keysConflict,
   mergeProvenance,
   type DiscoveredJobDetail,
   type DiscoveredJobSummary,
@@ -76,6 +80,29 @@ function detail(row: Row): DiscoveredJobDetail {
   };
 }
 
+type ImportRow = Omit<Row, "rawSource">;
+
+async function selectChunked<T>(
+  values: string[],
+  query: (chunk: string[]) => Promise<T[]>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < values.length; i += ID_CHUNK) {
+    out.push(...(await query(values.slice(i, i + ID_CHUNK))));
+  }
+  return out;
+}
+
+/**
+ * Import one batch from a discovery run.
+ *
+ * A job that shares an identity key with a job already stored (the same
+ * posting found earlier on another board) is merged into that job: every
+ * sighting is added to its provenance and only the fields it lacks are
+ * filled. Status, promotion and first-seen date of a stored job are never
+ * changed by an import. An earlier copy of the incoming job itself is folded
+ * into the match only while it is untouched (status new, not promoted).
+ */
 export async function importDiscovery(
   db: Db,
   userId: string,
@@ -83,26 +110,225 @@ export async function importDiscovery(
   jobs: IngestJob[],
   now = new Date().toISOString(),
 ) {
-  const existing = new Map<string, Provenance[]>();
-  const ids = jobs.map((j) => j.id);
-  for (let i = 0; i < ids.length; i += ID_CHUNK) {
-    const rows = await db
-      .select({ id: discoveredJobs.id, provenance: discoveredJobs.provenance })
+  const incomingKeys = new Map(
+    jobs.map((j) => [
+      j.id,
+      [...new Set([`id:${j.id}`, ...(j.dedupKeys ?? [])])],
+    ]),
+  );
+  const keyOwner = new Map<string, string>();
+  for (const row of await selectChunked(
+    [...new Set([...incomingKeys.values()].flat())],
+    (chunk) =>
+      db
+        .select({ key: discoveredJobKeys.key, jobId: discoveredJobKeys.jobId })
+        .from(discoveredJobKeys)
+        .where(
+          and(
+            eq(discoveredJobKeys.userId, userId),
+            inArray(discoveredJobKeys.key, chunk),
+          ),
+        ),
+  ))
+    keyOwner.set(row.key, row.jobId);
+
+  // An "id:<job id>" key names a stored job directly, even one imported
+  // before keys existed.
+  const idKeyIds = [...incomingKeys.values()]
+    .flat()
+    .filter((k) => k.startsWith("id:"))
+    .map((k) => k.slice(3));
+  const relevant = [
+    ...new Set([...jobs.map((j) => j.id), ...idKeyIds, ...keyOwner.values()]),
+  ];
+  const rowById = new Map<string, ImportRow>();
+  const columns = omit(getTableColumns(discoveredJobs), ["rawSource"]);
+  for (const row of await selectChunked(relevant, (chunk) =>
+    db
+      .select(columns)
       .from(discoveredJobs)
       .where(
         and(
           eq(discoveredJobs.userId, userId),
-          inArray(discoveredJobs.id, ids.slice(i, i + ID_CHUNK)),
+          inArray(discoveredJobs.id, chunk),
         ),
-      );
-    for (const row of rows)
-      existing.set(row.id, parseProvenance(row.provenance));
+      ),
+  ))
+    rowById.set(row.id, row);
+  // A stored job always owns its own id key, whatever an older key row says.
+  for (const id of rowById.keys()) keyOwner.set(`id:${id}`, id);
+  const keysOf = new Map<string, Set<string>>();
+  for (const row of await selectChunked([...rowById.keys()], (chunk) =>
+    db
+      .select({ key: discoveredJobKeys.key, jobId: discoveredJobKeys.jobId })
+      .from(discoveredJobKeys)
+      .where(
+        and(
+          eq(discoveredJobKeys.userId, userId),
+          inArray(discoveredJobKeys.jobId, chunk),
+        ),
+      ),
+  )) {
+    if (!keysOf.has(row.jobId)) keysOf.set(row.jobId, new Set());
+    keysOf.get(row.jobId)!.add(row.key);
   }
 
-  const statements = jobs.map((job) => {
-    const provenance = JSON.stringify(
-      mergeProvenance(existing.get(job.id) ?? [], job.provenance),
-    );
+  const statements: BatchItem<"sqlite">[] = [];
+  let created = 0;
+  let updated = 0;
+  let merged = 0;
+  let firstSightings = 0;
+  const sawRun = (provenance: Provenance[]) =>
+    provenance.some((p) => p.runId === run.runId);
+
+  const addKeys = (jobId: string, keys: string[]) => {
+    if (!keysOf.has(jobId)) keysOf.set(jobId, new Set());
+    for (const key of keys) {
+      if (!keyOwner.has(key)) keyOwner.set(key, jobId);
+      keysOf.get(jobId)!.add(key);
+      // A key already owned by another (conflicting) job keeps its owner.
+      statements.push(
+        db
+          .insert(discoveredJobKeys)
+          .values({ userId, key, jobId })
+          .onConflictDoNothing(),
+      );
+    }
+  };
+
+  for (const job of jobs) {
+    const keys = incomingKeys.get(job.id)!;
+    const own = rowById.get(job.id);
+    const ranked = new Map<string, number>();
+    for (const key of keys) {
+      const owner = keyOwner.get(key);
+      if (owner && owner !== job.id && rowById.has(owner)) {
+        ranked.set(
+          owner,
+          Math.min(ranked.get(owner) ?? Infinity, keyRank(key)),
+        );
+      }
+    }
+    const target = [...ranked]
+      .sort(
+        (a, b) =>
+          a[1] - b[1] ||
+          rowById
+            .get(a[0])!
+            .firstSeenAt.localeCompare(rowById.get(b[0])!.firstSeenAt),
+      )
+      .map(([id]) => id)
+      .find((id) => !keysConflict(keys, keysOf.get(id) ?? []));
+    // A job the user has acted on (status or promotion) always survives a
+    // merge; two acted-on jobs are never merged.
+    const decided = (row: ImportRow) =>
+      row.status !== "new" || row.promotedJobId != null;
+    let survivorId = target;
+    let victim = own;
+    if (target && own) {
+      const targetRow = rowById.get(target)!;
+      if (decided(own) && decided(targetRow)) survivorId = undefined;
+      else if (decided(own)) {
+        survivorId = own.id;
+        victim = targetRow;
+      }
+    }
+
+    if (survivorId) {
+      const into = rowById.get(survivorId)!;
+      let provenance = parseProvenance(into.provenance);
+      const victimProvenance = victim ? parseProvenance(victim.provenance) : [];
+      if (!sawRun([...provenance, ...victimProvenance])) firstSightings += 1;
+      const known = new Set(
+        [...provenance, ...victimProvenance].map(
+          (p) => `${p.site}\u0000${p.url}\u0000${p.runId ?? ""}`,
+        ),
+      );
+      // Re-sending a sighting the survivor already holds is an update, not a new merge.
+      const addsSighting = job.provenance.some(
+        (p) => !known.has(`${p.site}\u0000${p.url}\u0000${p.runId ?? ""}`),
+      );
+      provenance = mergeProvenance(
+        mergeProvenance(provenance, victimProvenance),
+        job.provenance,
+      );
+      const fromVictim = victim ? fillMissing(into, victim) : {};
+      const patch = {
+        ...fromVictim,
+        ...fillMissing(
+          { ...into, ...fromVictim },
+          {
+            location: job.location ?? null,
+            postedAt: job.postedAt ?? null,
+            employmentType: job.employmentType ?? null,
+            description: job.description ?? null,
+            remoteType: job.remoteType,
+            salaryMin: job.salaryMin ?? null,
+            salaryMax: job.salaryMax ?? null,
+            salaryCurrency: job.salaryCurrency ?? null,
+            salaryInterval: job.salaryInterval ?? null,
+          },
+        ),
+      };
+      if (victim) {
+        statements.push(
+          db
+            .delete(discoveredJobs)
+            .where(
+              and(
+                eq(discoveredJobs.userId, userId),
+                eq(discoveredJobs.id, victim.id),
+              ),
+            ),
+          db
+            .update(discoveredJobKeys)
+            .set({ jobId: survivorId })
+            .where(
+              and(
+                eq(discoveredJobKeys.userId, userId),
+                eq(discoveredJobKeys.jobId, victim.id),
+              ),
+            ),
+        );
+        if (!keysOf.has(survivorId)) keysOf.set(survivorId, new Set());
+        for (const key of [
+          ...(keysOf.get(victim.id) ?? []),
+          `id:${victim.id}`,
+        ]) {
+          keyOwner.set(key, survivorId);
+          keysOf.get(survivorId)!.add(key);
+        }
+        keysOf.delete(victim.id);
+        rowById.delete(victim.id);
+        // Keep the folded id findable, so a later import of it lands here.
+        addKeys(survivorId, [`id:${victim.id}`]);
+      }
+      const set = {
+        ...patch,
+        provenance: JSON.stringify(provenance),
+        lastSeenAt: now,
+        lastRunId: run.runId,
+      };
+      statements.push(
+        db
+          .update(discoveredJobs)
+          .set(set)
+          .where(
+            and(
+              eq(discoveredJobs.userId, userId),
+              eq(discoveredJobs.id, survivorId),
+            ),
+          ),
+      );
+      rowById.set(survivorId, { ...into, ...set });
+      addKeys(survivorId, keys);
+      if (victim || addsSighting) merged += 1;
+      else updated += 1;
+      continue;
+    }
+
+    const before = own ? parseProvenance(own.provenance) : [];
+    if (!sawRun(before)) firstSightings += 1;
     const content = {
       title: job.title,
       company: job.company,
@@ -117,7 +343,7 @@ export async function importDiscovery(
       salaryInterval: job.salaryInterval ?? null,
       employmentType: job.employmentType ?? null,
       description: job.description ?? null,
-      provenance,
+      provenance: JSON.stringify(mergeProvenance(before, job.provenance)),
       rawSource:
         job.rawSource === undefined ? null : JSON.stringify(job.rawSource),
       lastSeenAt: now,
@@ -125,26 +351,38 @@ export async function importDiscovery(
     };
     // Status, promotion and first-seen date belong to the user's history and
     // are never overwritten by a later import.
-    return db
-      .insert(discoveredJobs)
-      .values({
+    statements.push(
+      db
+        .insert(discoveredJobs)
+        .values({
+          userId,
+          id: job.id,
+          status: "new",
+          firstSeenAt: now,
+          ...content,
+        })
+        .onConflictDoUpdate({
+          target: [discoveredJobs.userId, discoveredJobs.id],
+          set: content,
+        }),
+    );
+    const { rawSource: _raw, ...stored } = content;
+    void _raw;
+    rowById.set(job.id, {
+      ...(own ?? {
         userId,
         id: job.id,
         status: "new",
         firstSeenAt: now,
-        ...content,
-      })
-      .onConflictDoUpdate({
-        target: [discoveredJobs.userId, discoveredJobs.id],
-        set: content,
-      });
-  });
-  const created = jobs.filter((j) => !existing.has(j.id)).length;
-  // Jobs this run has not reported before. Re-sending a run (a retry, or
-  // `npm run push` of a saved run) then leaves its counts unchanged.
-  const firstSightings = jobs.filter(
-    (j) => !(existing.get(j.id) ?? []).some((p) => p.runId === run.runId),
-  ).length;
+        promotedJobId: null,
+        statusUpdatedAt: null,
+      }),
+      ...stored,
+    });
+    if (own) updated += 1;
+    else created += 1;
+    addKeys(job.id, keys);
+  }
 
   const runStatement = db
     .insert(discoveryRuns)
@@ -162,6 +400,8 @@ export async function importDiscovery(
     })
     .onConflictDoUpdate({
       // A large run arrives in several requests; accumulate its counts.
+      // Re-sending a run (a retry, or importing a saved run again) adds only
+      // first sightings, so its counts do not grow.
       target: [discoveryRuns.userId, discoveryRuns.runId],
       set: {
         status: run.status,
@@ -173,8 +413,11 @@ export async function importDiscovery(
       },
     });
 
-  await db.batch([runStatement, ...statements]);
-  return { received: jobs.length, created, updated: jobs.length - created };
+  await db.batch([runStatement, ...statements] as [
+    BatchItem<"sqlite">,
+    ...BatchItem<"sqlite">[],
+  ]);
+  return { received: jobs.length, created, updated, merged };
 }
 
 export async function listDiscovered(
@@ -260,10 +503,20 @@ export async function updateDiscoveredStatus(
 }
 
 export async function deleteDiscovered(db: Db, userId: string, id: string) {
-  const rows = await db
-    .delete(discoveredJobs)
-    .where(and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.id, id)))
-    .returning({ id: discoveredJobs.id });
+  const [, rows] = await db.batch([
+    db
+      .delete(discoveredJobKeys)
+      .where(
+        and(
+          eq(discoveredJobKeys.userId, userId),
+          eq(discoveredJobKeys.jobId, id),
+        ),
+      ),
+    db
+      .delete(discoveredJobs)
+      .where(and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.id, id)))
+      .returning({ id: discoveredJobs.id }),
+  ]);
   return rows.length > 0;
 }
 
