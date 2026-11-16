@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -34,7 +34,9 @@ import {
   Command,
   Globe,
   PanelLeftClose,
+  Radar,
 } from "lucide-react";
+import DiscoveredInbox from "@/components/discovered-inbox";
 import {
   analyze,
   authorizations,
@@ -58,6 +60,7 @@ import {
 } from "@/lib/workspace";
 const navs = [
   { name: "Overview", icon: LayoutDashboard },
+  { name: "Discovered", icon: Radar },
   { name: "Opportunities", icon: BriefcaseBusiness },
   { name: "Resume studio", icon: FileText },
   { name: "Outreach", icon: Mail },
@@ -164,6 +167,20 @@ export default function Home() {
   const backupRef = useRef<HTMLInputElement>(null);
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const busy = useRef(false);
+  const [discoveredNew, setDiscoveredNew] = useState(0);
+  const onDiscoveredCount = useCallback((n: number) => setDiscoveredNew(n), []);
+  useEffect(() => {
+    // Sidebar badge only; the inbox loads its own list. Failures just hide it.
+    fetch("/api/discovered-jobs?status=new&limit=0")
+      .then(
+        (r) =>
+          (r.ok ? r.json() : null) as Promise<{
+            counts?: { new?: number };
+          } | null>,
+      )
+      .then((b) => setDiscoveredNew(b?.counts?.new ?? 0))
+      .catch(() => setDiscoveredNew(0));
+  }, []);
   const workspace = demo ? demoData : data;
   const jobs = workspace.jobs;
   const active = jobs.filter(
@@ -404,6 +421,9 @@ export default function Home() {
               <n.icon size={18} />
               <span>{n.name}</span>
               {n.name === "Opportunities" && <small>{jobs.length}</small>}
+              {n.name === "Discovered" && !demo && discoveredNew > 0 && (
+                <small className="orange-count">{discoveredNew}</small>
+              )}
               {n.name === "Follow-ups" && reminders.length > 0 && (
                 <small className="orange-count">{reminders.length}</small>
               )}
@@ -515,28 +535,32 @@ export default function Home() {
               <h1>
                 {page === "Overview"
                   ? "Your next chapter starts here."
-                  : page === "Opportunities"
-                    ? "Make room for the right role."
-                    : page === "Resume studio"
-                      ? "Your experience. The right emphasis."
-                      : page === "Outreach"
-                        ? "Start a meaningful conversation."
-                        : page === "Follow-ups"
-                          ? "Keep the conversation moving."
-                          : "Your workspace, your way."}
+                  : page === "Discovered"
+                    ? "Fresh roles, found for you."
+                    : page === "Opportunities"
+                      ? "Make room for the right role."
+                      : page === "Resume studio"
+                        ? "Your experience. The right emphasis."
+                        : page === "Outreach"
+                          ? "Start a meaningful conversation."
+                          : page === "Follow-ups"
+                            ? "Keep the conversation moving."
+                            : "Your workspace, your way."}
               </h1>
               <p>
                 {page === "Overview"
                   ? "A little more clarity. A lot more momentum. Let’s find your next role."
-                  : page === "Opportunities"
-                    ? "Every opportunity, every platform. One place to move forward."
-                    : page === "Resume studio"
-                      ? "Match your experience to the role, while keeping your original resume intact."
-                      : page === "Outreach"
-                        ? "Thoughtful drafts grounded in the role and the resume you provide."
-                        : page === "Follow-ups"
-                          ? "Deadlines and next steps, without the mental tabs."
-                          : "Manage your goals, backups, and the way you work."}
+                  : page === "Discovered"
+                    ? "Review what automated search found. Nothing becomes an application until you save it."
+                    : page === "Opportunities"
+                      ? "Every opportunity, every platform. One place to move forward."
+                      : page === "Resume studio"
+                        ? "Match your experience to the role, while keeping your original resume intact."
+                        : page === "Outreach"
+                          ? "Thoughtful drafts grounded in the role and the resume you provide."
+                          : page === "Follow-ups"
+                            ? "Deadlines and next steps, without the mental tabs."
+                            : "Manage your goals, backups, and the way you work."}
               </p>
             </div>
             <div className="heading-actions">
@@ -1508,6 +1532,22 @@ export default function Home() {
                     </div>
                   </section>
                 </div>
+              )}
+              {page === "Discovered" && (
+                <DiscoveredInbox
+                  demo={demo}
+                  promotedIds={
+                    new Set(
+                      jobs.flatMap((j) =>
+                        j.discoveredJobId ? [j.discoveredJobId] : [],
+                      ),
+                    )
+                  }
+                  onPromote={(job, message) =>
+                    save({ ...workspace, jobs: [job, ...jobs] }, message)
+                  }
+                  onNewCount={onDiscoveredCount}
+                />
               )}
               {page === "Follow-ups" && (
                 <section className="panel">
