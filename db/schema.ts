@@ -75,3 +75,21 @@ export const discoveryRuns = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.runId] })],
 );
+
+/**
+ * Identity keys of discovered jobs ("kind:value", computed by ApplyPilot's
+ * dedup engine). One key belongs to one job; an import that shares a key with
+ * an existing job is merged into it instead of creating a duplicate.
+ */
+export const discoveredJobKeys = sqliteTable(
+  "discovered_job_keys",
+  {
+    userId: text("user_id").notNull(),
+    key: text("key").notNull(),
+    jobId: text("job_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.key] }),
+    index("discovered_job_keys_user_job").on(t.userId, t.jobId),
+  ],
+);
