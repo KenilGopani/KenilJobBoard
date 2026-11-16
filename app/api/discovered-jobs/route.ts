@@ -24,6 +24,12 @@ export async function GET(request: Request) {
   const status = params.get("status");
   // limit=0 returns only counts and runs (used for the sidebar badge).
   const limit = Number(params.get("limit") ?? 500);
+  const screening = params.get("screening");
+  if (screening && screening !== "kept" && screening !== "rejected")
+    return Response.json(
+      { error: "screening must be kept or rejected." },
+      { status: 400 },
+    );
   if (!Number.isInteger(limit) || limit < 0 || limit > 500)
     return Response.json({ error: "limit must be 0-500." }, { status: 400 });
   if (status && !(discoveryStatuses as readonly string[]).includes(status))
@@ -34,6 +40,7 @@ export async function GET(request: Request) {
       user.userId,
       (status as DiscoveryStatus | null) ?? null,
       limit,
+      screening as "kept" | "rejected" | null,
     );
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {

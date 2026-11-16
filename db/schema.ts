@@ -47,6 +47,12 @@ export const discoveredJobs = sqliteTable(
     lastRunId: text("last_run_id"),
     promotedJobId: text("promoted_job_id"),
     statusUpdatedAt: text("status_updated_at"),
+    /** Hard-filter verdict from ApplyPilot: pass | review | reject. */
+    screeningVerdict: text("screening_verdict"),
+    /** Work-authorization signal: compatible | incompatible | unknown | manual-review. */
+    authorization: text("authorization"),
+    /** JSON of the full screening (checks with reasons and evidence). */
+    screening: text("screening"),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),

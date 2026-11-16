@@ -62,6 +62,33 @@ export type Provenance = z.infer<typeof provenanceSchema>;
  * restated here so Rolecraft does not depend on that repository. ApplyPilot's
  * discovery-to-Rolecraft integration test keeps the two in step.
  */
+export const screeningSignals = [
+  "compatible",
+  "incompatible",
+  "unknown",
+  "manual-review",
+] as const;
+export const screeningVerdicts = ["pass", "review", "reject"] as const;
+
+/** Hard-filter result from ApplyPilot (its CanonicalScreening). */
+export const screeningSchema = z.object({
+  verdict: z.enum(screeningVerdicts),
+  authorization: z.enum(screeningSignals),
+  checks: z
+    .array(
+      z.object({
+        rule: z.string().min(1).max(50),
+        status: z.enum(screeningSignals),
+        reason: z.string().max(500),
+        evidence: z.string().max(500).optional(),
+      }),
+    )
+    .max(30),
+  screenedAt: isoDateTime,
+  policyVersion: z.string().max(50),
+});
+export type Screening = z.infer<typeof screeningSchema>;
+
 export const ingestJobSchema = z.object({
   id: z.string().regex(/^job_[0-9a-f]{16}$/),
   externalId: z.string().min(1).max(200).optional(),
@@ -86,6 +113,8 @@ export const ingestJobSchema = z.object({
   discoveredAt: isoDateTime,
   provenance: z.array(provenanceSchema).min(1).max(50),
   rawSource: z.unknown().optional(),
+  /** Hard-filter result (ApplyPilot Phase 11). */
+  screening: screeningSchema.optional(),
   /** Identity keys from ApplyPilot's dedup engine, e.g. "ats:greenhouse:123". */
   dedupKeys: z
     .array(
@@ -140,9 +169,12 @@ export type DiscoveredJobSummary = {
   firstSeenAt: string;
   lastSeenAt: string;
   promotedJobId: string | null;
+  screeningVerdict: Screening["verdict"] | null;
+  authorization: Screening["authorization"] | null;
 };
 
 export type DiscoveredJobDetail = DiscoveredJobSummary & {
+  screening: Screening | null;
   description: string | null;
   provenance: Provenance[];
   rawSource: unknown;

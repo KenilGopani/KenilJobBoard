@@ -1,4 +1,14 @@
-import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { getDb } from "@/db";
 import { discoveredJobKeys, discoveredJobs, discoveryRuns } from "@/db/schema";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -14,6 +24,7 @@ import {
   type IngestJob,
   type IngestRun,
   type Provenance,
+  type Screening,
 } from "./discovery.ts";
 
 type Db = ReturnType<typeof getDb>;
@@ -62,7 +73,31 @@ function summary(
     firstSeenAt: row.firstSeenAt,
     lastSeenAt: row.lastSeenAt,
     promotedJobId: row.promotedJobId,
+    screeningVerdict: (row.screeningVerdict ??
+      null) as DiscoveredJobSummary["screeningVerdict"],
+    authorization: (row.authorization ??
+      null) as DiscoveredJobSummary["authorization"],
   };
+}
+
+function parseScreening(text: string | null): Screening | null {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as Screening;
+  } catch {
+    return null;
+  }
+}
+
+/** Columns that store a job's latest screening; empty when the import carried none. */
+function screeningColumns(screening: Screening | undefined) {
+  return screening
+    ? {
+        screeningVerdict: screening.verdict,
+        authorization: screening.authorization,
+        screening: JSON.stringify(screening),
+      }
+    : {};
 }
 
 function detail(row: Row): DiscoveredJobDetail {
@@ -77,6 +112,7 @@ function detail(row: Row): DiscoveredJobDetail {
     description: row.description,
     provenance: parseProvenance(row.provenance),
     rawSource,
+    screening: parseScreening(row.screening),
   };
 }
 
@@ -305,6 +341,8 @@ export async function importDiscovery(
       }
       const set = {
         ...patch,
+        // The newest screening (it has seen the most text) replaces an older one.
+        ...screeningColumns(job.screening),
         provenance: JSON.stringify(provenance),
         lastSeenAt: now,
         lastRunId: run.runId,
@@ -348,6 +386,7 @@ export async function importDiscovery(
         job.rawSource === undefined ? null : JSON.stringify(job.rawSource),
       lastSeenAt: now,
       lastRunId: run.runId,
+      ...screeningColumns(job.screening),
     };
     // Status, promotion and first-seen date belong to the user's history and
     // are never overwritten by a later import.
@@ -376,6 +415,9 @@ export async function importDiscovery(
         firstSeenAt: now,
         promotedJobId: null,
         statusUpdatedAt: null,
+        screeningVerdict: null,
+        authorization: null,
+        screening: null,
       }),
       ...stored,
     });
@@ -425,16 +467,30 @@ export async function listDiscovered(
   userId: string,
   status: DiscoveryStatus | null,
   limit = 500,
+  /** kept: not rejected by the hard filters (or unscreened); rejected: rejected by them. */
+  screening: "kept" | "rejected" | null = null,
 ) {
   // Everything except description and rawSource, which only the detail view needs.
   const columns = omit(getTableColumns(discoveredJobs), [
     "description",
     "rawSource",
   ]);
-  const where = status
-    ? and(eq(discoveredJobs.userId, userId), eq(discoveredJobs.status, status))
-    : eq(discoveredJobs.userId, userId);
-  const [rows, counts, runs] = await Promise.all([
+  const rejected = eq(discoveredJobs.screeningVerdict, "reject");
+  const screeningFilter =
+    screening === "rejected"
+      ? rejected
+      : screening === "kept"
+        ? or(
+            isNull(discoveredJobs.screeningVerdict),
+            ne(discoveredJobs.screeningVerdict, "reject"),
+          )
+        : undefined;
+  const where = and(
+    eq(discoveredJobs.userId, userId),
+    status ? eq(discoveredJobs.status, status) : undefined,
+    screeningFilter,
+  );
+  const [rows, counts, filteredRows, runs] = await Promise.all([
     limit === 0
       ? Promise.resolve([])
       : db
@@ -452,6 +508,16 @@ export async function listDiscovered(
       .where(eq(discoveredJobs.userId, userId))
       .groupBy(discoveredJobs.status),
     db
+      .select({ count: sql<number>`count(*)` })
+      .from(discoveredJobs)
+      .where(
+        and(
+          eq(discoveredJobs.userId, userId),
+          eq(discoveredJobs.status, "new"),
+          rejected,
+        ),
+      ),
+    db
       .select()
       .from(discoveryRuns)
       .where(eq(discoveryRuns.userId, userId))
@@ -461,6 +527,8 @@ export async function listDiscovered(
   return {
     jobs: rows.map(summary),
     counts: Object.fromEntries(counts.map((c) => [c.status, Number(c.count)])),
+    /** New jobs the hard filters rejected (shown apart from the inbox). */
+    filtered: Number(filteredRows[0]?.count ?? 0),
     runs: runs.map((r) => ({
       runId: r.runId,
       adapter: r.adapter,
