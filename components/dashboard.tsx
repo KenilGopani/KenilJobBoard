@@ -57,7 +57,9 @@ import {
   tracks,
   Workspace,
   workspaceSchema,
+  withStatusChange,
 } from "@/lib/workspace";
+import JobTimeline from "@/components/job-timeline";
 const navs = [
   { name: "Overview", icon: LayoutDashboard },
   { name: "Discovered", icon: Radar },
@@ -348,7 +350,7 @@ export default function Home() {
   async function updateJob(j: Job) {
     return save({
       ...workspace,
-      jobs: jobs.map((x) => (x.id === j.id ? j : x)),
+      jobs: jobs.map((x) => (x.id === j.id ? withStatusChange(x, j) : x)),
     });
   }
   function add() {
@@ -1922,14 +1924,15 @@ export default function Home() {
                       void updateJob({
                         ...selectedJob,
                         status: v as Job["status"],
-                        appliedAt:
-                          v === "Applied" && !selectedJob.appliedAt
-                            ? today()
-                            : selectedJob.appliedAt,
                       })
                     }
                   />
                 </Field>
+                <JobTimeline
+                  job={selectedJob}
+                  disabled={saving || demo}
+                  onSave={(j) => updateJob(j)}
+                />
                 <button
                   className="button secondary full-width"
                   disabled={saving}
@@ -2012,13 +2015,10 @@ export default function Home() {
                   setFormError(result.error.issues[0].message);
                   return;
                 }
-                const job = {
-                  ...result.data,
-                  appliedAt:
-                    result.data.status === "Applied" && !result.data.appliedAt
-                      ? today()
-                      : result.data.appliedAt,
-                };
+                const job = withStatusChange(
+                  jobs.find((j) => j.id === result.data.id),
+                  result.data,
+                );
                 if (
                   await save(
                     {
