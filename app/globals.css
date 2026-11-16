@@ -2490,3 +2490,56 @@ tr:hover td {
   border-radius: 5px;
   padding: 3px 6px;
 }
+
+/* Discovered jobs: application prep and run history */
+.discovery-prep code {
+  font-size: 10px;
+  background: #f4f5f6;
+  border-radius: 4px;
+  padding: 1px 4px;
+  overflow-wrap: anywhere;
+}
+.discovery-draft {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.discovery-draft > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.discovery-draft .button {
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.discovery-draft p {
+  white-space: pre-wrap;
+}
+.discovery-runs {
+  padding: 0 20px 10px;
+  font-size: 10px;
+  color: #8b9197;
+}
+.discovery-runs summary {
+  cursor: pointer;
+}
+.discovery-runs ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.discovery-runs li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+}
+.discovery-runs em {
+  font-style: normal;
+  font-size: 8px;
+  border-radius: 5px;
+  padding: 2px 6px;
+}

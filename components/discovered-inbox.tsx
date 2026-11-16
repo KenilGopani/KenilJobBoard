@@ -311,6 +311,32 @@ export default function DiscoveredInbox({
           <RotateCcw size={14} /> Refresh
         </button>
       </div>
+      {(data?.runs.length ?? 0) > 0 && (
+        <details className="discovery-runs">
+          <summary>Recent search runs</summary>
+          <ul>
+            {data!.runs.map((r) => (
+              <li key={r.runId}>
+                <span>
+                  {new Date(r.importedAt).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
+                <span>{r.adapter}</span>
+                <span>
+                  {r.jobsReceived} found · {r.jobsNew} new
+                </span>
+                <em
+                  className={`tone-${r.status === "ok" ? "ok" : r.status === "failed" ? "bad" : "warn"}`}
+                >
+                  {r.status}
+                </em>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <div className="detail-tabs discovery-tabs" role="tablist">
         {tabs.map((t) => (
           <button
@@ -440,6 +466,7 @@ export default function DiscoveredInbox({
                               {j.evaluationDecision?.toLowerCase()}
                             </em>
                           )}
+                        {j.preparedAt && <em className="tone-ok">Prepared</em>}
                         {j.screeningVerdict === "review" && (
                           <em className="tone-warn">Needs review</em>
                         )}
@@ -611,6 +638,123 @@ export default function DiscoveredInbox({
                             <p>{detail.evaluation.reason}</p>
                           </div>
                         )}
+                        <div className="discovery-evaluation discovery-prep">
+                          <h4>Application prep</h4>
+                          {detail.preparation ? (
+                            <>
+                              <p>
+                                Resume:{" "}
+                                <strong>
+                                  {resumeLabel[
+                                    detail.preparation.resume.family
+                                  ] ?? detail.preparation.resume.family}
+                                </strong>{" "}
+                                — tailored version (your own lines,{" "}
+                                {detail.preparation.resume.changedLines}{" "}
+                                reordered):{" "}
+                                <code>{detail.preparation.resume.file}</code>
+                              </p>
+                              {detail.preparation.priorities.length > 0 && (
+                                <>
+                                  <h5>Tailoring priorities</h5>
+                                  <ul>
+                                    {detail.preparation.priorities.map(
+                                      (p, i) => (
+                                        <li key={i}>
+                                          <span>{p.detail}</span>
+                                          <q>{p.evidence}</q>
+                                        </li>
+                                      ),
+                                    )}
+                                  </ul>
+                                </>
+                              )}
+                              {detail.preparation.gaps.length > 0 && (
+                                <>
+                                  <h5>
+                                    Gaps to prepare for (never add them to the
+                                    resume)
+                                  </h5>
+                                  <ul>
+                                    {detail.preparation.gaps.map((g) => (
+                                      <li key={g}>{g}</li>
+                                    ))}
+                                  </ul>
+                                </>
+                              )}
+                              {detail.preparation.drafts && (
+                                <>
+                                  <h5>Drafts (edit before using)</h5>
+                                  {(
+                                    [
+                                      [
+                                        "Cover letter",
+                                        detail.preparation.drafts.coverLetter,
+                                      ],
+                                      [
+                                        "Recruiter note",
+                                        detail.preparation.drafts.outreach,
+                                      ],
+                                      [
+                                        "Why this company",
+                                        detail.preparation.drafts.whyCompany,
+                                      ],
+                                    ] as const
+                                  )
+                                    .filter(([, text]) => text)
+                                    .map(([label, text]) => (
+                                      <div
+                                        key={label}
+                                        className="discovery-draft"
+                                      >
+                                        <div>
+                                          <strong>{label}</strong>
+                                          <button
+                                            className="button secondary"
+                                            onClick={() =>
+                                              void navigator.clipboard?.writeText(
+                                                text,
+                                              )
+                                            }
+                                          >
+                                            Copy
+                                          </button>
+                                        </div>
+                                        <p>{text}</p>
+                                      </div>
+                                    ))}
+                                  {detail.preparation.drafts.unverifiedNumbers
+                                    .length > 0 && (
+                                    <p>
+                                      <em className="tone-warn">
+                                        Check these numbers:{" "}
+                                        {detail.preparation.drafts.unverifiedNumbers.join(
+                                          ", ",
+                                        )}
+                                      </em>
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                              <h5>Before you apply</h5>
+                              <ul>
+                                {detail.preparation.checklist.map((c) => (
+                                  <li key={c}>☐ {c}</li>
+                                ))}
+                              </ul>
+                            </>
+                          ) : (
+                            <p>
+                              Not prepared yet. In ApplyPilot run{" "}
+                              <code>
+                                npm run prepare-application -- --job {detail.id}
+                              </code>{" "}
+                              (add <code>--drafts</code> for a cover letter and
+                              recruiter note). Nothing is ever submitted for
+                              you.
+                            </p>
+                          )}
+                        </div>
                         {detail.screening && (
                           <ul className="discovery-checks">
                             {detail.screening.checks.map((c, i) => (
